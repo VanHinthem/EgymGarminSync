@@ -13,8 +13,15 @@ try
 {
     using var client = new EgymClient(baseUrl, email, password);
     var today = DateOnly.FromDateTime(DateTime.Today);
-    var workouts = await client.GetWorkoutsAsync(today.AddDays(-30), today);
-    Console.WriteLine($"Retrieved {workouts.Count} workouts in the past 30 days.");
+    var days = 180;
+    if (args.Length > 0 && (!int.TryParse(args[0], out days) || days is < 1 or > 730))
+    {
+        Console.Error.WriteLine("Optional argument: number of days to look back (1-730).");
+        return 1;
+    }
+    var start = today.AddDays(-days);
+    var workouts = await client.GetWorkoutsAsync(start, today);
+    Console.WriteLine($"Retrieved {workouts.Count} workouts in the past {days} days.");
     // Only summary metadata; do not dump sensitive raw workout payloads to the terminal.
     foreach (var workout in workouts)
     {
@@ -26,7 +33,7 @@ try
     // The EGYM Smart Strength circuit may be recorded in strength measurements
     // rather than the general workouts endpoint. Report only response structure,
     // not personal training values or raw JSON.
-    var strength = await client.GetStrengthMeasurementsAsync(today.AddDays(-30), today);
+    var strength = await client.GetStrengthMeasurementsAsync(start, today);
     Console.WriteLine($"Strength measurements response type: {strength.ValueKind}");
     if (strength.ValueKind == System.Text.Json.JsonValueKind.Array)
         Console.WriteLine($"Strength measurements: {strength.GetArrayLength()} entries");
