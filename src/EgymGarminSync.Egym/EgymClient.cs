@@ -162,6 +162,21 @@ public sealed class EgymClient : IDisposable
         return results;
     }
 
+    /// <summary>Read EGYM strength measurements. This may hold Smart Strength circuit sessions
+    /// even when the general workout list is empty. Returns the original JSON shape.</summary>
+    public async Task<JsonElement> GetStrengthMeasurementsAsync(DateOnly start, DateOnly end, CancellationToken ct = default)
+    {
+        if (end < start) throw new ArgumentException("End must be on or after start.");
+        if (_gymId is null) await LoginAsync(ct);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(_timeZone!);
+        var query = "startDate=" + Uri.EscapeDataString(start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) +
+                    "&endDate=" + Uri.EscapeDataString(end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) +
+                    "&zoneId=" + Uri.EscapeDataString(zone.Id);
+        using var response = await GetMwaAsync($"{MwaBase}/measurements/v1.0/strength?{query}", ct);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
+        return json.RootElement.Clone();
+    }
+
     private async Task<HttpResponseMessage> GetMwaAsync(string url, CancellationToken ct)
     {
         for (var attempt = 0; attempt < 2; attempt++)
