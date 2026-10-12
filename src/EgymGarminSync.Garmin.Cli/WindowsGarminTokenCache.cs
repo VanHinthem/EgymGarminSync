@@ -10,6 +10,7 @@ public sealed class WindowsGarminTokenCache : ITokenCache
 {
     private readonly string _path;
     private readonly byte[] _entropy;
+    private readonly string _cooldownPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private TokenDocument _tokens = new();
 
@@ -22,8 +23,25 @@ public sealed class WindowsGarminTokenCache : ITokenCache
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EgymGarminSync", "Garmin");
         Directory.CreateDirectory(folder);
         _path = Path.Combine(folder, accountId + ".dpapi");
+        _cooldownPath = Path.Combine(folder, accountId + ".cooldown");
         _entropy = SHA256.HashData(Encoding.UTF8.GetBytes("EgymGarminSync:Garmin:OAuth:v1:" + accountId));
         Load();
+    }
+
+    public bool IsInLoginCooldown(out DateTimeOffset retryAfterUtc)
+    {
+        retryAfterUtc = default;
+        if (!File.Exists(_cooldownPath)) return false;
+        if (!long.TryParse(File.ReadAllText(_cooldownPath), out var ticks)) return false;
+        retryAfterUtc = new DateTimeOffset(ticks, TimeSpan.Zero);
+        return retryAfterUtc > DateTimeOffset.UtcNow;
+    }
+
+    public void RecordLoginFailure() => File.WriteAllText(_cooldownPath, DateTimeOffset.UtcNow.AddMinutes(30).UtcTicks.ToString());
+
+    public void ClearLoginCooldown()
+    {
+        if (File.Exists(_cooldownPath)) File.Delete(_cooldownPath);
     }
 
     private void Load()
