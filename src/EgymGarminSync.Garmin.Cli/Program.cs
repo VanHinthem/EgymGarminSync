@@ -15,7 +15,9 @@ try
 {
     using var http = new HttpClient();
     var client = new GarminConnectClient(new GarminConnectContext(http, new BasicAuthParameters(email, password)));
+    Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
+    Console.WriteLine($"Step 1 OK: {workouts.Length} workouts");
     Console.WriteLine("EGYM Garmin templates:");
     foreach (var id in new long[] { 1464321438, 1464319904 })
     {
@@ -26,8 +28,16 @@ try
             continue;
         }
         Console.WriteLine($"  {listed.WorkoutId}: {listed.WorkoutName}");
-        var full = await client.GetWorkout(id);
-        PrintShape(JsonSerializer.SerializeToElement(full), "template", 0, 6);
+        try
+        {
+            Console.WriteLine($"Step 2: fetching template {id}...");
+            var full = await client.GetWorkout(id);
+            PrintShape(JsonSerializer.SerializeToElement(full), "template", 0, 6);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Template {id} failed ({ex.GetType().Name}).");
+        }
     }
 
     // Recorded exercise sets are distinct from template steps; both must be inspected.
@@ -35,8 +45,16 @@ try
     foreach (var (id, label) in new[] { (24180037460L, "EGYM Negatief"), (23883291887L, "EGYM Positief") })
     {
         Console.WriteLine($"  {label} ({id}):");
-        var sets = await client.GetActivityExerciseSets(id);
-        PrintShape(JsonSerializer.SerializeToElement(sets), "activity", 0, 6);
+        try
+        {
+            Console.WriteLine($"Step 3: fetching exercise sets for activity {id}...");
+            var sets = await client.GetActivityExerciseSets(id);
+            PrintShape(JsonSerializer.SerializeToElement(sets), "activity", 0, 6);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Activity {id} failed ({ex.GetType().Name}).");
+        }
     }
     return 0;
 }
