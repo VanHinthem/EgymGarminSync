@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Garmin.Connect;
 using Garmin.Connect.Auth;
+using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
 
 var email = Environment.GetEnvironmentVariable("GARMIN_EMAIL");
@@ -57,6 +58,12 @@ try
         }
     }
     return 0;
+}
+catch (GarminConnectAuthenticationException ex)
+{
+    Console.Error.WriteLine($"Garmin authentication failed (code={ex.Code}, innerType={ex.InnerException?.GetType().Name ?? "none"}).");
+    Console.Error.WriteLine("No response bodies, tokens or authentication messages are printed.");
+    return 1;
 }
 catch (Exception ex)
 {
