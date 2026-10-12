@@ -34,6 +34,13 @@ try
         {
             Console.WriteLine($"Step 2: fetching template {id}...");
             var full = await context.GetAndDeserialize<JsonElement>($"/workout-service/workout/{id}");
+            Console.WriteLine("  Raw template root keys: " + SafeKeys(full));
+            if (full.TryGetProperty("workoutSegments", out var segments) && segments.ValueKind == JsonValueKind.Array)
+                foreach (var segment in segments.EnumerateArray())
+                    if (segment.TryGetProperty("workoutSteps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+                        foreach (var step in steps.EnumerateArray())
+                            if (step.TryGetProperty("type", out var type) && type.ToString() == "RepeatGroupDTO")
+                                Console.WriteLine("  Repeat group keys: " + SafeKeys(step));
             PrintShape(full, "template", 0, 12);
         }
         catch (Exception ex)
@@ -51,6 +58,7 @@ try
         {
             Console.WriteLine($"Step 3: fetching exercise sets for activity {id}...");
             var sets = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{id}/exerciseSets");
+            Console.WriteLine("  Exercise-set response root keys: " + SafeKeys(sets));
             PrintShape(sets, "activity", 0, 12);
         }
         catch (Exception ex)
@@ -102,4 +110,12 @@ static void PrintShape(JsonElement element, string path, int depth, int maxDepth
                 PrintShape(item, $"{path}[{index}]", depth + 1, maxDepth);
             break;
     }
+}
+
+static string SafeKeys(JsonElement value)
+{
+    if (value.ValueKind != JsonValueKind.Object) return $"({value.ValueKind})";
+    return string.Join(", ", value.EnumerateObject().Select(p => p.Name).Where(name =>
+        !new[] { "token", "user", "owner", "url", "author", "image", "cookie", "email" }
+            .Any(blocked => name.Contains(blocked, StringComparison.OrdinalIgnoreCase))));
 }
