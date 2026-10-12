@@ -6,6 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="GarminConnect" Version="1.0.0" />
+    <PackageReference Include="Unofficial.Garmin.Connect" Version="0.10.0" />
   </ItemGroup>
 </Project>
