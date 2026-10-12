@@ -44,6 +44,7 @@ public sealed class WindowsGarminTokenCache : ITokenCache
         if (File.Exists(_cooldownPath)) File.Delete(_cooldownPath);
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private void Load()
     {
         if (!File.Exists(_path)) return;
@@ -102,6 +103,7 @@ public sealed class WindowsGarminTokenCache : ITokenCache
         finally { _gate.Release(); }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private void Save()
     {
         var clear = JsonSerializer.SerializeToUtf8Bytes(_tokens);
