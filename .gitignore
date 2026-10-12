@@ -1,0 +1,22 @@
+# .NET
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+# Frontend
+node_modules/
+dist/
+coverage/
+# Local secrets
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+**/appsettings.Local.json
+*.pfx
+*.key
+# OS / tools
+.DS_Store
+.idea/
+.vscode/
