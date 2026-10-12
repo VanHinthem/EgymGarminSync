@@ -13,16 +13,23 @@ if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
     return 1;
 }
 
+WindowsGarminTokenCache? tokenCache = null;
 try
 {
     using var http = new HttpClient();
-    var tokenCache = new WindowsGarminTokenCache(email);
+    tokenCache = new WindowsGarminTokenCache(email);
+    if (tokenCache.IsInLoginCooldown(out var retryAfterUtc))
+    {
+        Console.Error.WriteLine($"Garmin login cooldown is active until {retryAfterUtc.ToLocalTime():yyyy-MM-dd HH:mm}. No login attempted.");
+        return 1;
+    }
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
     Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
     Console.WriteLine($"Step 1 OK: {workouts.Length} workouts");
+    tokenCache.ClearLoginCooldown();
     Console.WriteLine("EGYM Garmin templates:");
     foreach (var id in new long[] { 1464321438, 1464319904 })
     {
@@ -73,6 +80,7 @@ try
 }
 catch (GarminConnectAuthenticationException ex)
 {
+    if (ex.Code == Code.OAuth1TicketNotFound) tokenCache?.RecordLoginFailure();
     Console.Error.WriteLine($"Garmin authentication failed (code={ex.Code}, innerType={ex.InnerException?.GetType().Name ?? "none"}).");
     Console.Error.WriteLine("No response bodies, tokens or authentication messages are printed.");
     return 1;
