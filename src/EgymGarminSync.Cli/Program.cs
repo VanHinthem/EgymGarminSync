@@ -42,6 +42,26 @@ try
         if (latest.TryGetProperty("exercises", out var exercises) &&
             exercises.ValueKind == System.Text.Json.JsonValueKind.Array && exercises.GetArrayLength() > 0)
         {
+            Console.WriteLine("Latest training — exercises and sets:");
+            foreach (var exercise in exercises.EnumerateArray())
+            {
+                var label = exercise.TryGetProperty("label", out var name) ? name.ToString() : "(unnamed)";
+                var activity = exercise.TryGetProperty("activity", out var act) ? act.ToString() : "(unknown)";
+                Console.WriteLine($"Exercise: {label} | activity: {activity}");
+                if (!exercise.TryGetProperty("sets", out var sets) || sets.ValueKind != System.Text.Json.JsonValueKind.Array)
+                    continue;
+                var setNumber = 0;
+                foreach (var set in sets.EnumerateArray())
+                {
+                    setNumber++;
+                    static string Field(System.Text.Json.JsonElement obj, string field) =>
+                        obj.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                        obj.TryGetProperty(field, out var value) ? value.ToString() : "—";
+                    Console.WriteLine($"  Set {setNumber}: reps={Field(set, "numberOfReps")}, " +
+                        $"weight={Field(set, "weight")}, method={Field(set, "trainingMethod")}, " +
+                        $"sideMode={Field(set, "sideMode")}");
+                }
+            }
             var sample = exercises[0];
             Console.WriteLine("Exercise fields: " + string.Join(", ", sample.EnumerateObject().Select(p => p.Name)));
             foreach (var field in sample.EnumerateObject())
