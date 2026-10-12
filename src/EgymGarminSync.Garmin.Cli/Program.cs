@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EgymGarminSync.Garmin.Cli;
 using Garmin.Connect;
 using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
@@ -15,7 +16,9 @@ if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
 try
 {
     using var http = new HttpClient();
-    var context = new GarminConnectContext(http, new BasicAuthParameters(email, password));
+    var tokenCache = new WindowsGarminTokenCache(email);
+    var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
+    Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
     Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
