@@ -26,48 +26,45 @@ try
     var sorted = workouts.OrderByDescending(w =>
         w.TryGetProperty("completedAt", out var at) && DateTimeOffset.TryParse(at.ToString(), out var dt)
             ? dt : DateTimeOffset.MinValue).ToArray();
-    foreach (var workout in sorted.Take(10))
+    // Compact workout overview including observed strength training methods.
+    // No raw activity JSON or personal authentication details are printed.
+    static string Value(System.Text.Json.JsonElement obj, string name)
+        => obj.ValueKind == System.Text.Json.JsonValueKind.Object &&
+           obj.TryGetProperty(name, out var value) && value.ValueKind != System.Text.Json.JsonValueKind.Null
+            ? value.ToString() : "—";
+
+    foreach (var workout in sorted.Take(12))
     {
-        var date = workout.TryGetProperty("completedAt", out var completed) ? completed.ToString() : "(unknown)";
-        var count = workout.TryGetProperty("exercises", out var exercises) && exercises.ValueKind == System.Text.Json.JsonValueKind.Array
-            ? exercises.GetArrayLength() : 0;
-        Console.WriteLine($"{date}: {count} exercises");
+        var exercises = workout.TryGetProperty("exercises", out var entries) &&
+                        entries.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? entries.EnumerateArray().ToArray()
+            : Array.Empty<System.Text.Json.JsonElement>();
+        var methods = exercises.SelectMany(ex =>
+                ex.TryGetProperty("sets", out var sets) && sets.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? sets.EnumerateArray().ToArray()
+                    : Array.Empty<System.Text.Json.JsonElement>())
+            .Select(set => Value(set, "trainingMethod"))
+            .Where(method => method != "—" && method.Length > 0)
+            .Distinct().ToArray();
+        Console.WriteLine($"{Value(workout, "completedAt")}: {exercises.Length} exercises; methods={string.Join(", ", methods)}");
     }
-    // Display schema keys only. This lets us identify the data structure without
-    // printing raw responses, authentication details, or personal training values.
-    if (sorted.Length > 0)
+
+    if (sorted.Length > 0 && sorted[0].TryGetProperty("exercises", out var latestExercises) &&
+        latestExercises.ValueKind == System.Text.Json.JsonValueKind.Array)
     {
-        var latest = sorted[0];
-        Console.WriteLine("Latest workout fields: " + string.Join(", ", latest.EnumerateObject().Select(p => p.Name)));
-        if (latest.TryGetProperty("exercises", out var exercises) &&
-            exercises.ValueKind == System.Text.Json.JsonValueKind.Array && exercises.GetArrayLength() > 0)
+        Console.WriteLine("Latest training — compact exercise overview:");
+        foreach (var exercise in latestExercises.EnumerateArray())
         {
-            Console.WriteLine("Latest training — exercises and sets:");
-            foreach (var exercise in exercises.EnumerateArray())
-            {
-                var label = exercise.TryGetProperty("label", out var name) ? name.ToString() : "(unnamed)";
-                var activity = exercise.TryGetProperty("activity", out var act) ? act.ToString() : "(unknown)";
-                Console.WriteLine($"Exercise: {label} | activity: {activity}");
-                if (!exercise.TryGetProperty("sets", out var sets) || sets.ValueKind != System.Text.Json.JsonValueKind.Array)
-                    continue;
-                var setNumber = 0;
-                foreach (var set in sets.EnumerateArray())
-                {
-                    setNumber++;
-                    static string Field(System.Text.Json.JsonElement obj, string field) =>
-                        obj.ValueKind == System.Text.Json.JsonValueKind.Object &&
-                        obj.TryGetProperty(field, out var value) ? value.ToString() : "—";
-                    Console.WriteLine($"  Set {setNumber}: reps={Field(set, "numberOfReps")}, " +
-                        $"weight={Field(set, "weight")}, method={Field(set, "trainingMethod")}, " +
-                        $"sideMode={Field(set, "sideMode")}");
-                }
-            }
-            var sample = exercises[0];
-            Console.WriteLine("Exercise fields: " + string.Join(", ", sample.EnumerateObject().Select(p => p.Name)));
-            foreach (var field in sample.EnumerateObject())
-                if (field.Value.ValueKind == System.Text.Json.JsonValueKind.Array && field.Value.GetArrayLength() > 0 &&
-                    field.Value[0].ValueKind == System.Text.Json.JsonValueKind.Object)
-                    Console.WriteLine($"{field.Name} item fields: " + string.Join(", ", field.Value[0].EnumerateObject().Select(p => p.Name)));
+            var activityId = exercise.TryGetProperty("activity", out var activity)
+                ? Value(activity, "activityId") : "—";
+            Console.WriteLine($"{Value(exercise, "label")} (id={activityId})");
+            if (!exercise.TryGetProperty("sets", out var sets) ||
+                sets.ValueKind != System.Text.Json.JsonValueKind.Array)
+                continue;
+            foreach (var (set, index) in sets.EnumerateArray().Select((item, index) => (item, index)))
+                Console.WriteLine($"  Set {index + 1}: reps={Value(set, "numberOfReps")}, " +
+                    $"weight={Value(set, "weight")}, method={Value(set, "trainingMethod")}, " +
+                    $"side={Value(set, "sideMode")}");
         }
     }
     // The EGYM Smart Strength circuit may be recorded in strength measurements
