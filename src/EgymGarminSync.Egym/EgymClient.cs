@@ -25,7 +25,7 @@ public sealed class EgymClient : IDisposable
 
     public EgymClient(string? gymBaseUrl, string email, string password, HttpClient? httpClient = null)
     {
-        if (!string.IsNullOrWhiteSpace(gymBaseUrl)) _gymUrl = ValidateHttpsUrl(gymBaseUrl);
+        if (!string.IsNullOrWhiteSpace(gymBaseUrl)) _gymUrl = NormalizeBaseUrl(ValidateHttpsUrl(gymBaseUrl));
         _email = !string.IsNullOrWhiteSpace(email) ? email : throw new ArgumentException("Email required.", nameof(email));
         _password = !string.IsNullOrWhiteSpace(password) ? password : throw new ArgumentException("Password required.", nameof(password));
         _ownsClient = httpClient is null;
@@ -46,8 +46,10 @@ public sealed class EgymClient : IDisposable
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
             throw new InvalidOperationException("Discovery returned an invalid HTTPS URL.");
-        return new Uri(uri.ToString().TrimEnd('/') + "/");
+        return uri;
     }
+
+    private static Uri NormalizeBaseUrl(Uri uri) => new(uri.ToString().TrimEnd('/') + "/");
 
     private Uri GymUri(string path) => new(_gymUrl ?? throw new InvalidOperationException("Gym discovery has not completed."), path.TrimStart('/'));
 
@@ -87,7 +89,7 @@ public sealed class EgymClient : IDisposable
             root.ObjectForKey("NetworkSettings") is not NSDictionary network ||
             network.ObjectForKey("NGBackendAddressKey") is not NSString address)
             throw new InvalidOperationException("Branding.plist does not contain a Netpulse backend URL.");
-        _gymUrl = ValidateHttpsUrl(address.ToString());
+        _gymUrl = NormalizeBaseUrl(ValidateHttpsUrl(address.ToString()));
         return _gymUrl;
     }
 
