@@ -23,12 +23,32 @@ try
     var workouts = await client.GetWorkoutsAsync(start, today);
     Console.WriteLine($"Retrieved {workouts.Count} workouts in the past {days} days.");
     // Only summary metadata; do not dump sensitive raw workout payloads to the terminal.
-    foreach (var workout in workouts)
+    var sorted = workouts.OrderByDescending(w =>
+        w.TryGetProperty("completedAt", out var at) && DateTimeOffset.TryParse(at.ToString(), out var dt)
+            ? dt : DateTimeOffset.MinValue).ToArray();
+    foreach (var workout in sorted.Take(10))
     {
         var date = workout.TryGetProperty("completedAt", out var completed) ? completed.ToString() : "(unknown)";
         var count = workout.TryGetProperty("exercises", out var exercises) && exercises.ValueKind == System.Text.Json.JsonValueKind.Array
             ? exercises.GetArrayLength() : 0;
         Console.WriteLine($"{date}: {count} exercises");
+    }
+    // Display schema keys only. This lets us identify the data structure without
+    // printing raw responses, authentication details, or personal training values.
+    if (sorted.Length > 0)
+    {
+        var latest = sorted[0];
+        Console.WriteLine("Latest workout fields: " + string.Join(", ", latest.EnumerateObject().Select(p => p.Name)));
+        if (latest.TryGetProperty("exercises", out var exercises) &&
+            exercises.ValueKind == System.Text.Json.JsonValueKind.Array && exercises.GetArrayLength() > 0)
+        {
+            var sample = exercises[0];
+            Console.WriteLine("Exercise fields: " + string.Join(", ", sample.EnumerateObject().Select(p => p.Name)));
+            foreach (var field in sample.EnumerateObject())
+                if (field.Value.ValueKind == System.Text.Json.JsonValueKind.Array && field.Value.GetArrayLength() > 0 &&
+                    field.Value[0].ValueKind == System.Text.Json.JsonValueKind.Object)
+                    Console.WriteLine($"{field.Name} item fields: " + string.Join(", ", field.Value[0].EnumerateObject().Select(p => p.Name)));
+        }
     }
     // The EGYM Smart Strength circuit may be recorded in strength measurements
     // rather than the general workouts endpoint. Report only response structure,
