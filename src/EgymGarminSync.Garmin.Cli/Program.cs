@@ -15,7 +15,8 @@ if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
 try
 {
     using var http = new HttpClient();
-    var client = new GarminConnectClient(new GarminConnectContext(http, new BasicAuthParameters(email, password)));
+    var context = new GarminConnectContext(http, new BasicAuthParameters(email, password));
+    var client = new GarminConnectClient(context);
     Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
     Console.WriteLine($"Step 1 OK: {workouts.Length} workouts");
@@ -32,8 +33,8 @@ try
         try
         {
             Console.WriteLine($"Step 2: fetching template {id}...");
-            var full = await client.GetWorkout(id);
-            PrintShape(JsonSerializer.SerializeToElement(full), "template", 0, 12);
+            var full = await context.GetAndDeserialize<JsonElement>($"/workout-service/workout/{id}");
+            PrintShape(full, "template", 0, 12);
         }
         catch (Exception ex)
         {
@@ -49,8 +50,8 @@ try
         try
         {
             Console.WriteLine($"Step 3: fetching exercise sets for activity {id}...");
-            var sets = await client.GetActivityExerciseSets(id);
-            PrintShape(JsonSerializer.SerializeToElement(sets), "activity", 0, 12);
+            var sets = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{id}/exerciseSets");
+            PrintShape(sets, "activity", 0, 12);
         }
         catch (Exception ex)
         {
@@ -90,7 +91,7 @@ static void PrintShape(JsonElement element, string path, int depth, int maxDepth
                     continue;
                 if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
                     PrintShape(prop.Value, path + "." + prop.Name, depth + 1, maxDepth);
-                else if (new[] { "workoutId", "workoutName", "stepId", "stepOrder", "stepType", "exerciseName", "category", "exerciseCategory", "exerciseName", "weight", "weightValue", "repetitionCount", "numberOfReps", "durationValue", "durationType", "setType", "exerciseId", "type", "value", "unit", "targetType", "targetValue", "weightUnit", "repetitions", "exerciseNameId", "categoryId", "duration", "weightInGrams", "description" }
+                else if (new[] { "workoutId", "workoutName", "stepId", "stepOrder", "stepType", "exerciseName", "category", "exerciseCategory", "exerciseName", "weight", "weightValue", "repetitionCount", "numberOfReps", "durationValue", "durationType", "setType", "exerciseId", "type", "value", "unit", "targetType", "targetValue", "weightUnit", "repetitions", "exerciseNameId", "categoryId", "duration", "weightInGrams", "description", "childStepId", "numberOfIterations", "endConditionValue", "weight", "reps", "repCount", "startTime", "category", "name" }
                          .Contains(prop.Name, StringComparer.OrdinalIgnoreCase))
                     Console.WriteLine($"    {path}.{prop.Name} = {prop.Value}");
             }
