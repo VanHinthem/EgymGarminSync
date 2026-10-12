@@ -49,6 +49,16 @@ public sealed class EgymClient : IDisposable
         return uri;
     }
 
+    // The Branding.plist download link may contain signed query parameters.
+    // Keep these intact; only the actual gym backend must be a plain base URL.
+    private static Uri ValidateBrandingResourceUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidOperationException("Discovery returned an invalid Branding.plist resource URL.");
+        return uri;
+    }
+
     private static Uri NormalizeBaseUrl(Uri uri) => new(uri.ToString().TrimEnd('/') + "/");
 
     private Uri GymUri(string path) => new(_gymUrl ?? throw new InvalidOperationException("Gym discovery has not completed."), path.TrimStart('/'));
@@ -81,7 +91,7 @@ public sealed class EgymClient : IDisposable
         }
         if (string.IsNullOrWhiteSpace(plistUrl)) throw new InvalidOperationException("No Branding.plist in gym configuration.");
         // Reject insecure or embedded-credential URLs before following the discovery-provided resource.
-        var brandingUri = ValidateHttpsUrl(plistUrl);
+        var brandingUri = ValidateBrandingResourceUrl(plistUrl);
         using var branding = await _http.GetAsync(brandingUri, ct);
         await EnsureSuccessAsync(branding);
         var bytes = await branding.Content.ReadAsByteArrayAsync(ct);
