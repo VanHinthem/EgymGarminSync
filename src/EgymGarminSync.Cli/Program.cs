@@ -23,6 +23,23 @@ try
             ? exercises.GetArrayLength() : 0;
         Console.WriteLine($"{date}: {count} exercises");
     }
+    // The EGYM Smart Strength circuit may be recorded in strength measurements
+    // rather than the general workouts endpoint. Report only response structure,
+    // not personal training values or raw JSON.
+    var strength = await client.GetStrengthMeasurementsAsync(today.AddDays(-30), today);
+    Console.WriteLine($"Strength measurements response type: {strength.ValueKind}");
+    if (strength.ValueKind == System.Text.Json.JsonValueKind.Array)
+        Console.WriteLine($"Strength measurements: {strength.GetArrayLength()} entries");
+    else if (strength.ValueKind == System.Text.Json.JsonValueKind.Object)
+    {
+        foreach (var property in strength.EnumerateObject())
+        {
+            var shape = property.Value.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? $"Array ({property.Value.GetArrayLength()} items)"
+                : property.Value.ValueKind.ToString();
+            Console.WriteLine($"Strength field: {property.Name} = {shape}");
+        }
+    }
     return 0;
 }
 catch (Exception ex)
