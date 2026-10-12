@@ -1,4 +1,5 @@
 using GarminConnect;
+using System.Text.Json;
 
 // READ-ONLY Garmin discovery proof of concept.
 // No Garmin mutation calls are used here.
@@ -39,13 +40,19 @@ try
 
     var workouts = await client.GetWorkoutsAsync(0, 100);
     Console.WriteLine("Garmin workout templates:");
-    foreach (var workout in workouts)
-        Console.WriteLine($"  {workout.WorkoutId}: {workout.WorkoutName}");
+    if (workouts.ValueKind == JsonValueKind.Array)
+        foreach (var workout in workouts.EnumerateArray())
+            Console.WriteLine($"  {Field(workout, "workoutId")}: {Field(workout, "workoutName")}");
+    else
+        Console.WriteLine($"  Response shape: {workouts.ValueKind}");
 
     var activities = await client.GetActivitiesAsync(0, 20);
     Console.WriteLine("Recent Garmin activities:");
     foreach (var activity in activities)
-        Console.WriteLine($"  {activity.ActivityId}: {activity.ActivityName}");
+    {
+        var value = JsonSerializer.SerializeToElement(activity);
+        Console.WriteLine($"  {Field(value, "activityId", "ActivityId")}: {Field(value, "activityName", "ActivityName")}");
+    }
 
     return 0;
 }
@@ -54,4 +61,13 @@ catch (Exception ex)
     // Do not print full request/response bodies or authentication tokens.
     Console.Error.WriteLine($"Garmin read-only discovery failed ({ex.GetType().Name}).");
     return 1;
+}
+
+static string Field(JsonElement obj, params string[] names)
+{
+    if (obj.ValueKind != JsonValueKind.Object) return "—";
+    foreach (var name in names)
+        if (obj.TryGetProperty(name, out var val) && val.ValueKind != JsonValueKind.Null)
+            return val.ToString();
+    return "—";
 }
