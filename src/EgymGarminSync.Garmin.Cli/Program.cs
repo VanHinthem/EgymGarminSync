@@ -41,7 +41,7 @@ try
                         foreach (var step in steps.EnumerateArray())
                             if (step.TryGetProperty("type", out var type) && type.ToString() == "RepeatGroupDTO")
                                 Console.WriteLine("  Repeat group keys: " + SafeKeys(step));
-            PrintShape(full, "template", 0, 12);
+            PrintTemplate(full);
         }
         catch (Exception ex)
         {
@@ -59,7 +59,7 @@ try
             Console.WriteLine($"Step 3: fetching exercise sets for activity {id}...");
             var sets = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{id}/exerciseSets");
             Console.WriteLine("  Exercise-set response root keys: " + SafeKeys(sets));
-            PrintShape(sets, "activity", 0, 12);
+            PrintActivitySets(sets);
         }
         catch (Exception ex)
         {
@@ -118,4 +118,52 @@ static string SafeKeys(JsonElement value)
     return string.Join(", ", value.EnumerateObject().Select(p => p.Name).Where(name =>
         !new[] { "token", "user", "owner", "url", "author", "image", "cookie", "email" }
             .Any(blocked => name.Contains(blocked, StringComparison.OrdinalIgnoreCase))));
+}
+
+static string Field(JsonElement item, string key)
+    => item.ValueKind == JsonValueKind.Object && item.TryGetProperty(key, out var v) &&
+       v.ValueKind != JsonValueKind.Null ? v.ToString() : "—";
+
+static void PrintTemplate(JsonElement template)
+{
+    if (!template.TryGetProperty("workoutSegments", out var segments) || segments.ValueKind != JsonValueKind.Array) return;
+    foreach (var segment in segments.EnumerateArray())
+    {
+        if (!segment.TryGetProperty("workoutSteps", out var steps) || steps.ValueKind != JsonValueKind.Array) continue;
+        foreach (var step in steps.EnumerateArray())
+        {
+            if (Field(step, "type") != "RepeatGroupDTO")
+            {
+                Console.WriteLine($"    Top level: {Field(step, "type")} category={Field(step, "category")} order={Field(step, "stepOrder")}");
+                continue;
+            }
+            Console.WriteLine($"    Repeat group: {Field(step, "numberOfIterations")} iterations");
+            if (!step.TryGetProperty("workoutSteps", out var children) || children.ValueKind != JsonValueKind.Array) continue;
+            foreach (var child in children.EnumerateArray())
+            {
+                var category = Field(child, "category");
+                if (category == "—") continue; // Separate rest steps remain untouched.
+                Console.WriteLine($"      {category}/{Field(child, "exerciseName")} stepId={Field(child, "stepId")} reps={Field(child, "endConditionValue")} weight={Field(child, "weightValue")}");
+            }
+        }
+    }
+}
+
+static void PrintActivitySets(JsonElement data)
+{
+    if (!data.TryGetProperty("exerciseSets", out var sets) || sets.ValueKind != JsonValueKind.Array)
+    {
+        Console.WriteLine("    No exerciseSets array found. Root keys: " + SafeKeys(data));
+        return;
+    }
+    var records = sets.EnumerateArray().ToArray();
+    Console.WriteLine($"    {records.Length} total set records; ACTIVE={records.Count(x => Field(x, "setType") == "ACTIVE")}; REST={records.Count(x => Field(x, "setType") == "REST")}");
+    foreach (var (set, index) in records.Select((item, index) => (item, index)))
+    {
+        if (Field(set, "setType") != "ACTIVE") continue;
+        var exercise = set.TryGetProperty("exercises", out var names) &&
+                       names.ValueKind == JsonValueKind.Array && names.GetArrayLength() > 0
+            ? names[0] : default;
+        Console.WriteLine($"      [{index}] {Field(exercise, "category")}/{Field(exercise, "name")} reps={Field(set, "repetitionCount")} weightRaw={Field(set, "weight")}");
+    }
 }
