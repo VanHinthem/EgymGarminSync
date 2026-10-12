@@ -3,9 +3,9 @@ using EgymGarminSync.Egym;
 var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
 var password = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
 var baseUrl = Environment.GetEnvironmentVariable("EGYM_BASE_URL");
-if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(baseUrl))
+if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
 {
-    Console.Error.WriteLine("Set EGYM_EMAIL, EGYM_PASSWORD and EGYM_BASE_URL (the HTTPS Netpulse base URL).");
+    Console.Error.WriteLine("Set EGYM_EMAIL and EGYM_PASSWORD; EGYM_BASE_URL is optional (automatically discovered).");
     return 1;
 }
 
