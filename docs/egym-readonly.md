@@ -15,3 +15,7 @@ The command requests the past 30 days of workouts and prints only their completi
 - Validate exercise payloads, set weights, units, circuit rounds and the mode representation on real data.
 - Add user-authorized gym discovery, retry for expired Netpulse sessions, tests with mocked HTTP, and richer diagnostics once the first connection is proven.
 - Do **not** enable Garmin writes during API exploration.
+
+## Verified findings
+
+See [EGYM API findings](egym-api-findings.md) for real-world observations from October 12, 2026, including the distinction between confirmed payload facts and unresolved Garmin mapping/weight semantics.
