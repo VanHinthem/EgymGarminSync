@@ -33,7 +33,7 @@ try
         {
             Console.WriteLine($"Step 2: fetching template {id}...");
             var full = await client.GetWorkout(id);
-            PrintShape(JsonSerializer.SerializeToElement(full), "template", 0, 6);
+            PrintShape(JsonSerializer.SerializeToElement(full), "template", 0, 12);
         }
         catch (Exception ex)
         {
@@ -50,7 +50,7 @@ try
         {
             Console.WriteLine($"Step 3: fetching exercise sets for activity {id}...");
             var sets = await client.GetActivityExerciseSets(id);
-            PrintShape(JsonSerializer.SerializeToElement(sets), "activity", 0, 6);
+            PrintShape(JsonSerializer.SerializeToElement(sets), "activity", 0, 12);
         }
         catch (Exception ex)
         {
@@ -85,18 +85,19 @@ static void PrintShape(JsonElement element, string path, int depth, int maxDepth
                     prop.Name.Contains("user", StringComparison.OrdinalIgnoreCase) ||
                     prop.Name.Contains("owner", StringComparison.OrdinalIgnoreCase) ||
                     prop.Name.Contains("url", StringComparison.OrdinalIgnoreCase) ||
-                    prop.Name.Contains("author", StringComparison.OrdinalIgnoreCase))
+                    prop.Name.Contains("author", StringComparison.OrdinalIgnoreCase) ||
+                    prop.Name.Contains("image", StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
                     PrintShape(prop.Value, path + "." + prop.Name, depth + 1, maxDepth);
-                else if (new[] { "workoutId", "workoutName", "stepId", "stepOrder", "stepType", "exerciseName", "category", "exerciseCategory", "exerciseName", "weight", "weightValue", "repetitionCount", "numberOfReps", "durationValue", "durationType", "setType", "exerciseId" }
+                else if (new[] { "workoutId", "workoutName", "stepId", "stepOrder", "stepType", "exerciseName", "category", "exerciseCategory", "exerciseName", "weight", "weightValue", "repetitionCount", "numberOfReps", "durationValue", "durationType", "setType", "exerciseId", "type", "value", "unit", "targetType", "targetValue", "weightUnit", "repetitions", "exerciseNameId", "categoryId", "duration", "weightInGrams", "description" }
                          .Contains(prop.Name, StringComparer.OrdinalIgnoreCase))
                     Console.WriteLine($"    {path}.{prop.Name} = {prop.Value}");
             }
             break;
         case JsonValueKind.Array:
             Console.WriteLine($"    {path}: {element.GetArrayLength()} items");
-            foreach (var (item, index) in element.EnumerateArray().Take(2).Select((item, index) => (item, index)))
+            foreach (var (item, index) in element.EnumerateArray().Take(25).Select((item, index) => (item, index)))
                 PrintShape(item, $"{path}[{index}]", depth + 1, maxDepth);
             break;
     }
