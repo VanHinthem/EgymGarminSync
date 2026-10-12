@@ -6,7 +6,7 @@ Run from the repository root with .NET 10 SDK installed:
 dotnet run --project src/EgymGarminSync.Cli
 ```
 
-Set `EGYM_EMAIL`, `EGYM_PASSWORD`, `EGYM_BASE_URL` in the **process environment** first; never commit or paste credentials. `EGYM_BASE_URL` is the HTTPS Netpulse gym base URL. Automatic gym URL discovery from EGYM's Branding.plist is **not implemented** in this first slice. Obtain the URL locally through authorized means.
+Set `EGYM_EMAIL` and `EGYM_PASSWORD` in the **process environment** first; never commit or paste credentials. `EGYM_BASE_URL` is now optional: when absent, the client discovers the backend through EGYM's user and gym configuration endpoints and parses `Branding.plist` (XML or binary) using `plist-cil`. You can override discovery with `EGYM_BASE_URL`.
 
 The command requests the past 30 days of workouts and prints only their completion timestamps and exercise counts.
 
