@@ -1,3 +1,4 @@
+using Claunia.PropertyList;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -13,7 +14,7 @@ public sealed class EgymClient : IDisposable
     private const string MwaBase = "https://mwa-api.int.api.egym.com/mwa/api";
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
-    private readonly Uri _gymUrl;
+    private Uri? _gymUrl;
     private readonly string _email;
     private readonly string _password;
     private string? _exerciserId;
@@ -22,13 +23,9 @@ public sealed class EgymClient : IDisposable
     private string? _accessToken;
     private DateTimeOffset _expiresAt;
 
-    public EgymClient(string gymBaseUrl, string email, string password, HttpClient? httpClient = null)
+    public EgymClient(string? gymBaseUrl, string email, string password, HttpClient? httpClient = null)
     {
-        if (!Uri.TryCreate(gymBaseUrl, UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.Query) ||
-            !string.IsNullOrEmpty(uri.Fragment))
-            throw new ArgumentException("A valid HTTPS gym Netpulse URL is required.", nameof(gymBaseUrl));
-        _gymUrl = new Uri(uri.ToString().TrimEnd('/') + "/");
+        if (!string.IsNullOrWhiteSpace(gymBaseUrl)) _gymUrl = ValidateHttpsUrl(gymBaseUrl);
         _email = !string.IsNullOrWhiteSpace(email) ? email : throw new ArgumentException("Email required.", nameof(email));
         _password = !string.IsNullOrWhiteSpace(password) ? password : throw new ArgumentException("Password required.", nameof(password));
         _ownsClient = httpClient is null;
@@ -44,10 +41,59 @@ public sealed class EgymClient : IDisposable
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("NetpulseFitness/3.91");
     }
 
-    private Uri GymUri(string path) => new(_gymUrl, path.TrimStart('/'));
+    private static Uri ValidateHttpsUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidOperationException("Discovery returned an invalid HTTPS URL.");
+        return new Uri(uri.ToString().TrimEnd('/') + "/");
+    }
+
+    private Uri GymUri(string path) => new(_gymUrl ?? throw new InvalidOperationException("Gym discovery has not completed."), path.TrimStart('/'));
+
+    /// <summary>Discover Netpulse gym backend via official EGYM app discovery endpoints.</summary>
+    public async Task<Uri> DiscoverGymAsync(CancellationToken ct = default)
+    {
+        if (_gymUrl is not null) return _gymUrl;
+        using var users = await _http.GetAsync("https://one.netpulse.com/np/egym/v1.0/users?email=" + Uri.EscapeDataString(_email), ct);
+        await EnsureSuccessAsync(users);
+        using var userJson = JsonDocument.Parse(await users.Content.ReadAsStreamAsync(ct));
+        var container = userJson.RootElement.GetProperty("containerData");
+        var brand = container.GetProperty("brandIdentifier").GetString();
+        var type = container.GetProperty("resourceType").GetString();
+        if (string.IsNullOrWhiteSpace(brand) || string.IsNullOrWhiteSpace(type))
+            throw new InvalidOperationException("No EGYM gym association was returned.");
+        var configUrl = "https://one.netpulse.com/np/nfa/config?brandIdentifier=" + Uri.EscapeDataString(brand) +
+            "&resourceType=" + Uri.EscapeDataString(type);
+        using var config = await _http.GetAsync(configUrl, ct);
+        await EnsureSuccessAsync(config);
+        using var configJson = JsonDocument.Parse(await config.Content.ReadAsStreamAsync(ct));
+        string? plistUrl = null;
+        foreach (var resource in configJson.RootElement.GetProperty("resources").EnumerateArray())
+        {
+            if (resource.TryGetProperty("key", out var key) && key.GetString() == "Branding.plist")
+            {
+                plistUrl = resource.GetProperty("url").GetString();
+                break;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(plistUrl)) throw new InvalidOperationException("No Branding.plist in gym configuration.");
+        // Reject insecure or embedded-credential URLs before following the discovery-provided resource.
+        var brandingUri = ValidateHttpsUrl(plistUrl);
+        using var branding = await _http.GetAsync(brandingUri, ct);
+        await EnsureSuccessAsync(branding);
+        var bytes = await branding.Content.ReadAsByteArrayAsync(ct);
+        if (PropertyListParser.Parse(bytes) is not NSDictionary root ||
+            root.ObjectForKey("NetworkSettings") is not NSDictionary network ||
+            network.ObjectForKey("NGBackendAddressKey") is not NSString address)
+            throw new InvalidOperationException("Branding.plist does not contain a Netpulse backend URL.");
+        _gymUrl = ValidateHttpsUrl(address.ToString());
+        return _gymUrl;
+    }
 
     public async Task LoginAsync(CancellationToken ct = default)
     {
+        if (_gymUrl is null) await DiscoverGymAsync(ct);
         using var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["username"] = _email, ["password"] = _password
