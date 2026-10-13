@@ -6,6 +6,9 @@ using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
 
+if (args.Contains("--offline-preflight-aug31", StringComparer.OrdinalIgnoreCase))
+    return await OfflineSnapshotPreflight.RunAsync();
+
 if (!OperatingSystem.IsWindows())
 {
     Console.Error.WriteLine("Garmin CLI currently requires Windows for its DPAPI token cache.");
