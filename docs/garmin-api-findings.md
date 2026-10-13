@@ -40,7 +40,7 @@ This is an **observed candidate mapping**, not yet validated across all sessions
 
 ## Pending
 - Verify unit semantics in Garmin source and EGYM negative resistance data before Garmin writes.
-- Print all sets in the compact CLI (the former debug output truncated arrays after 25 items).
+- **Resolved 2026-10-13:** compact CLI prints all 36 activity records and all 16 strength sets.
 - Validate cross-system workout matching by local dates/times, and address missing or extra sets.
 - Any eventual Garmin PUT must retain unchanged REST, cycling, nested group and unrelated metadata, make backups, show a full diff and require explicit approval.
 
@@ -55,4 +55,12 @@ After the earlier Garmin SSO error, the Windows CLI successfully authenticated a
 - Positive samples show 27000, 36000, 103000, 30000, 36000, 23000, 51000, and 27000 in the same exercise order. Garmin activities plausibly store grams; confirm formally before writes.
 - Bike and REST records have no resistance weight and must remain unchanged.
 
-Prior pending item *print all sets* is now resolved. The other validation and write-safety items remain open.
+Other validation and write-safety items remain open.
+
+### Windows authentication outcome (2026-10-13)
+
+- After earlier `OAuth1TicketNotFound` failures, Garmin login and read-only requests succeeded in two consecutive CLI runs.
+- Windows DPAPI cache file was observed in `%LOCALAPPDATA%\\EgymGarminSync\\Garmin\\` with `.dpapi` extension. This confirms the protected cache file was created, but **does not independently prove cache-hit reuse or cryptographic roundtrip after restarting the process**.
+- Local cooldown file was observed after a refused OAuth1 ticket. The software implements a 30-minute cooldown after that error.
+- PR #8 merged the read-only Garmin adapter and encrypted token cache to `main` after green CI.
+
