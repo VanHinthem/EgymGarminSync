@@ -61,6 +61,17 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Contains("--trial-preflight-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        if (args.Length != 1)
+        {
+            Console.Error.WriteLine("Usage: --trial-preflight-aug31");
+            return 1;
+        }
+        var result = await Aug31OneSetTrialDiagnostic.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--backup-aug31", StringComparer.OrdinalIgnoreCase))
     {
         var result = await GarminActivitySnapshot.RunAsync(context);
