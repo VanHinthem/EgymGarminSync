@@ -20,12 +20,13 @@ public sealed class WorkoutSessionMatcherTests
     }
 
     [Fact]
-    public void DifferentMethodNeverMatchesEvenOnSameDate()
+    public void DifferentMethodIsFlaggedForReviewEvenOnSameDate()
     {
         var match = Assert.Single(WorkoutSessionMatcher.Match(
             [new("egym-1", T0, EgymTrainingMethod.RegularRepBased)],
             [new(11, T0, GarminTrainingVariant.Negative)]));
-        Assert.Equal(SessionMatchStatus.NoCandidate, match.Status);
+        Assert.Equal(SessionMatchStatus.MethodConflict, match.Status);
+        Assert.Equal(11, match.GarminActivityId);
     }
 
     [Fact]
@@ -65,6 +66,27 @@ public sealed class WorkoutSessionMatcherTests
             [new("egym-1", T0, EgymTrainingMethod.Unknown)],
             [new(11, T0, GarminTrainingVariant.Positive)]));
         Assert.Equal(SessionMatchStatus.UnsupportedMethod, match.Status);
+    }
+
+    [Fact]
+    public void GarminStartAfterEgymCompletionDoesNotMatch()
+    {
+        var match = Assert.Single(WorkoutSessionMatcher.Match(
+            [new("egym-1", T0, EgymTrainingMethod.NegativeRepBased)],
+            [new(11, T0.AddMinutes(10), GarminTrainingVariant.Negative)]));
+        Assert.Equal(SessionMatchStatus.NoCandidate, match.Status);
+    }
+
+    [Fact]
+    public void June24ObservedMismatchIsReportedAsMethodConflict()
+    {
+        var egymCompletion = new DateTimeOffset(2026, 6, 24, 6, 11, 59, TimeSpan.Zero);
+        var garminStart = new DateTimeOffset(2026, 6, 24, 5, 29, 56, TimeSpan.Zero);
+        var match = Assert.Single(WorkoutSessionMatcher.Match(
+            [new("2026-06-24", egymCompletion, EgymTrainingMethod.NegativeRepBased)],
+            [new(23360196698, garminStart, GarminTrainingVariant.Positive)]));
+        Assert.Equal(SessionMatchStatus.MethodConflict, match.Status);
+        Assert.Equal(23360196698, match.GarminActivityId);
     }
 
     [Fact]
