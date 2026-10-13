@@ -26,7 +26,7 @@ This branch starts with a pure comparison module, without new login attempts or 
 
 - Inputs must already be normalized to UTC. EGYM `completedAt` and Garmin session start are distinct event types.
 - Require matching training variant (`REGULAR_REPBASED` → positive, `NEGATIVE_REPBASED` → negative).
-- Use an initial **engineering-only** four-hour UTC timestamp tolerance. This is **not** a measured EGYM–Garmin timing offset. It must be calibrated against live samples and their actual timestamps before production matching.
+- Use an initial **engineering-only** two-hour forward-only (Garmin start → EGYM completion) UTC timestamp tolerance. This is **not** a measured EGYM–Garmin timing offset. It must be calibrated against live samples and their actual timestamps before production matching.
 - Match only unique one-to-one candidates; multiple sessions within the window produce `Ambiguous` without choosing the closest one.
 - Unknown methods, unmatched dates, duplicate IDs or non-UTC timestamps fail explicitly.
 - No automatic link on calendar date alone, and no implicit template/activity association.
@@ -61,6 +61,15 @@ These elapsed values are **not a clock offset**. Garmin's sampled recorded durat
 
 **Exception:** 2026-06-24 EGYM reports `NEGATIVE_REPBASED`, but the Garmin activity with a compatible time has name `EGYM Positief` (ID `23360196698`). This is a real cross-system *method label mismatch*. The conservative matcher must report it as not matched or conflicting, never silently force-match by date.
 
-Engineering-only four-hour tolerance in the current session matcher is wider than needed for these samples. Calibrate and revise deliberately with wider historical evidence and tests; do not assert a validated production threshold yet.
+The initial four-hour tolerance was reduced to a provisional two-hour forward-only candidate window. This is not a validated production threshold. A single nearby activity with the wrong method is reported as `MethodConflict` (June 24 example), while multiple nearby sessions remain `Ambiguous`. Neither status authorizes automatic updates.
 
 No data was changed in either system.
+
+## Session matching refinement — 2026-10-13
+
+- EGYM completion must be at or after Garmin activity start; reversed timestamps never match.
+- The provisional default candidate window is now 0–120 minutes rather than an undirected ±4 hours. This accommodates the observed ~44–47-minute elapsed times but remains an engineering parameter, not a guarantee.
+- Method disagreement for a unique timestamp candidate returns `MethodConflict` with candidate activity ID, for review only. It must not be treated as a confirmed link for a weight update.
+- If two Garmin activities are in the window (or two EGYM sessions share a Garmin candidate), the result stays `Ambiguous` even when one of their names appears compatible.
+- Tests include the real June 24 timestamps and incompatible variants, using fixture values rather than live credentials.
+- Incomplete session detection still requires exercise/set completeness inspection after candidate association. A time-only match does not imply a complete workout.
