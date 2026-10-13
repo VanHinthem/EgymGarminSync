@@ -104,3 +104,11 @@ The user executed both `--circuit-check` commands on Windows with real, read-onl
 - These observations validate *structural completeness for the sampled records*, not every historical training or the correctness of resistance-weight semantics.
 - Matching by exercise identifier rather than recorded exercise order remains mandatory. Full end-to-end pairing and live weight-difference reporting are not yet implemented.
 - No Garmin or EGYM records were changed.
+
+## Combined review-only report (fixture-validated)
+
+`ReadOnlyComparisonReport.Build` combines an already-established session match, structural completeness and identity-based weight comparison. It **refuses to produce weights** if the session is ambiguous, has a method conflict, or is incomplete. It also requires one EGYM weight per expected exercise and rejects unknown or conflicting Garmin weight readings.
+
+The 2026-08-31 fixture uses the previously observed EGYM and Garmin negative workout values, yielding eight comparisons (seven differences, one equal). These are **unit-test fixtures sourced from separate observed API output**, not proof of an end-to-end integrated live report. Cross-system units and negative resistance meanings remain unverified: displayed differences are for review, never a recommendation to overwrite recorded Garmin sets.
+
+Next: connect normalized live read-only API data to the combined report and validate session identity before interpreting weight differences.
