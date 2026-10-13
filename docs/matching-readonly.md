@@ -297,3 +297,17 @@ This slice separates `CompletenessReport.IsComplete` (strict: any unexpected Gar
 For Jul 8 variable EGYM resistance, a separate read-only `SetWeightReviewMatcher` compares each machine's actual two EGYM weights to the two Garmin recorded weights as **unordered multisets**, without claiming cross-system set order identity. Missing Garmin sets or different values are not equal; varied weights are never collapsed to an average or a single arbitrary value. The historical diagnostic prints `SET-WEIGHT` differences and independent mapped-set repetition comparisons even when the existing per-exercise aggregate cannot be built. Three new tests cover reverse order, July 8 variable weights and a missing set.
 
 No Garmin write endpoint, token handling, or workout template data is changed. Verify CI then rerun the full historical diagnostic to confirm both May 4 and July 8 output.
+
+## Mapped-set exception handling verified live — 2026-10-13
+
+After the mapped-set comparison and per-set weight review changes, user reran `--history-compare 27`: `EGYM=28`, `Garmin=29`, `matched=27`, `conflicts=1`, `Inspected=27`, `structural errors=0`, no writes.
+
+- **2026-07-08**, Garmin `23519342631`: previously skipped because EGYM set weights differed. New read-only diagnostic prints per-set values: Leg Extension `329` EGYM [29,28] kg, Garmin [23,23] kg; Lat Pulldown `335` EGYM [39,40] kg, Garmin [36,36] kg. Overall **seven** per-exercise `SET-WEIGHT` differences and one Leg Press repetition mismatch EGYM [19,20] versus Garmin [20,20]. `mappedSetsComplete=True`, `repsEqual=False`. Set weights are treated as unordered multisets, not mapped physical first-to-first.
+- **2026-06-15**, Garmin `23259077933`: `complete=False` still truthfully reports the extra Garmin `UNKNOWN/(none)` ACTIVE set (index 36, zero reps, missing weight); known 16 strength sets are all present. `repsEqual=True`, `weightReviewable=True`, **six** known exercise-level weight differences.
+- **2026-05-04**, Garmin `22762471069`: extra Garmin `UNKNOWN/(none)` active set also remains visible and `complete=False`; `weightReviewable=True`, `weightDifferences=0`. A previously hidden repetition mismatch now appears: Chest Press `333` EGYM [15,15] vs Garmin [20,15].
+- The actual zero-repetition readings **within known strength exercises** on Aug 5 Leg Press and Jun 8 Abdominal Crunch are still shown separately. A zero-rep `UNKNOWN` extra is a different kind of anomaly.
+- Thus **eight known-exercise repetition mismatches** have been observed over the 27 matched sessions: six in the originally fully compared 24, plus the newly observable July 8 and May 4 mismatches. The July 8 weights are counted at set-review level, not as scalar exercise-weight aggregates.
+- CLI outputs `[29,0,28,0]` for two kg values under Dutch numeric locale (comma serves both as decimal delimiter and list separator). A future presentation improvement should format weight lists unambiguously, e.g. `[29.0 kg; 28.0 kg]`. The raw values themselves are correctly preserved.
+- No update permission follows from `weightReviewable=True`; resistance semantics remain unverified. All work is read-only.
+
+Next consideration: finalize a concise status model separating `ExpectedMappedSetsComplete`, `ExtraUnknownRecords`, `RepetitionDifferences` and `PerSetWeightDifferences`; improve output labels before backup/diff/write design.
