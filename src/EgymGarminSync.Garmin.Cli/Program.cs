@@ -5,6 +5,12 @@ using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
 
+if (!OperatingSystem.IsWindows())
+{
+    Console.Error.WriteLine("Garmin CLI currently requires Windows for its DPAPI token cache.");
+    return 1;
+}
+
 var email = Environment.GetEnvironmentVariable("GARMIN_EMAIL");
 var password = Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
 if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
