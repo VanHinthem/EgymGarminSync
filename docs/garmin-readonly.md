@@ -9,11 +9,11 @@ $env:GARMIN_PASSWORD = [System.Net.NetworkCredential]::new("", $secure).Password
 dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj
 ```
 
-Credentials are read from the current shell environment. Never commit or share them. MFA handling and token persistence need live validation.
+Credentials are read from the current shell environment. Never commit or share them. MFA remains unverified; Windows token persistence was implemented and a `.dpapi` file was observed during live testing on 2026-10-13.
 
-Library under evaluation: [sealbro/dotnet.garmin.connect](https://github.com/Melser/net-garminconnect). It is an **unofficial** API client. NuGet version `Unofficial.Garmin.Connect` 0.10.0 is published; compilation needs CI verification, and workout templates plus activity exercise sets still need real-data validation. The reference library may not support reading exercise sets; if not, extend the adapter with a narrowly scoped read-only call, avoiding write endpoints.
+Used library: [sealbro/dotnet.garmin.connect](https://github.com/sealbro/dotnet.garmin.connect), package `Unofficial.Garmin.Connect` 0.10.0. It is an **unofficial** client. CI and live read-only retrieval of both templates and both recorded activities passed. The package's typed workout model omits nested repeat steps, and its `GetActivityExerciseSets` method requests the wrong URL; the CLI therefore uses the same authenticated context to GET raw JSON from `/workout-service/workout/{id}` and `/activity-service/activity/{id}/exerciseSets`.
 
-Next: inspect the two Garmin workout templates' step identifiers and recent strength activity exercise sets, define redacted schemas, and map against EGYM IDs. Do not modify any historical activity or template until explicit user confirmation and reliable backups.
+Next: implement and verify cross-system workout matching and a read-only weight-difference preview. See `docs/garmin-api-findings.md` for observed IDs, exercise mapping candidates and unresolved unit semantics. Do not modify any historical activity or template until explicit user confirmation and reliable backups.
 
 
 ## Windows authentication persistence (issue #2)
@@ -24,7 +24,7 @@ Next: inspect the two Garmin workout templates' step identifiers and recent stre
 - The library can still require SSO after a fresh install or if OAuth1 is revoked. No cache can recover a token from a previous run that did not persist it.
 - After `OAuth1TicketNotFound`, the CLI writes a local 30-minute login cooldown marker and exits early on subsequent runs. This avoids repeated SSO attempts; it does not bypass Garmin's own restrictions.
 - No Garmin writes are added. This branch is still read-only.
-- Windows DPAPI is Windows-specific. The cross-platform CI build compiles the client, but **live authentication and DPAPI roundtrips must be tested on Windows**.
+- Windows DPAPI is Windows-specific. Cross-platform CI passed. Live Windows authentication succeeded and the `.dpapi` cache file was created, but cache reuse and decrypt-after-restart still need explicit verification.
 - Password remains in the current process environment; remove it after running with `Remove-Item Env:GARMIN_PASSWORD` if desired. Never print or commit credentials.
 - If credentials are needed again later, open a fresh shell and supply them interactively. Do not delete the token cache merely to troubleshoot a temporary authentication block.
 
