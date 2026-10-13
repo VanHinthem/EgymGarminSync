@@ -79,7 +79,12 @@ internal static class HistoricalComparisonDiagnostic
                 Console.WriteLine($"{date} {match.Status}: no exercise comparisons.");
                 continue;
             }
-            if (excludeCorrectedAugust31 && match.GarminActivityId == 24180037460L)\n            {\n                Console.WriteLine($"{date} Garmin={match.GarminActivityId} ALREADY CORRECTED; excluded from remaining review.");\n                continue;\n            }\n            if (visited >= maxSessions) continue;
+            if (excludeCorrectedAugust31 && match.GarminActivityId == 24180037460L)
+            {
+                Console.WriteLine($"{date} Garmin={match.GarminActivityId} ALREADY CORRECTED; excluded from remaining review.");
+                continue;
+            }
+            if (visited >= maxSessions) continue;
             visited++;
             try
             {
