@@ -115,8 +115,13 @@ internal static class HistoricalComparisonDiagnostic
 
                 if (egymWeightConflict)
                 {
-                    Console.WriteLine($"{date} Garmin={match.GarminActivityId} EGYM weights vary between sets; requires per-set review.");
+                    Console.WriteLine($"{date} Garmin={match.GarminActivityId} EGYM weights vary between sets; per-set weights need review.");
                     PrintSetDetails(workout, raw);
+                    var structure = StrengthSessionCompleteness.Check(egymCounts, garminCounts, Ids, 2);
+                    var reps = RepetitionMatcher.Compare(egymReps, garminReps);
+                    Console.WriteLine($"  mappedSetsComplete={structure.Issues.All(x => x.Side == CompletenessSide.Garmin && x.Reason == "UnexpectedExercise")} repsEqual={reps.Count == Ids.Length && reps.All(x => x.Status == RepetitionStatus.Equal)}");
+                    foreach (var diff in reps.Where(x => x.Status != RepetitionStatus.Equal))
+                        Console.WriteLine($"  REPS exercise={diff.EgymActivityId} EGYM=[{string.Join(",", diff.EgymReps)}] Garmin=[{string.Join(",", diff.GarminReps)}] {diff.Status}");
                     continue;
                 }
                 var report = ReadOnlyComparisonReport.Build(match, egymCounts, garminCounts,
