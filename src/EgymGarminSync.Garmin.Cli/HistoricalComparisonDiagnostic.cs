@@ -117,6 +117,14 @@ internal static class HistoricalComparisonDiagnostic
                 {
                     Console.WriteLine($"{date} Garmin={match.GarminActivityId} EGYM weights vary between sets; per-set weights need review.");
                     PrintSetDetails(workout, raw);
+                    var sourceSets = workout.GetProperty("exercises").EnumerateArray()
+                        .Where(ex => ex.GetProperty("activity").GetProperty("activityId").GetInt64() != 31)
+                        .ToDictionary(ex => ex.GetProperty("activity").GetProperty("activityId").GetInt64(),
+                            ex => (IReadOnlyList<decimal>)ex.GetProperty("sets").EnumerateArray()
+                                .Select(set => set.GetProperty("weight").GetDecimal()).ToArray());
+                    var setWeights = SetWeightReviewMatcher.Compare(sourceSets, recorded);
+                    foreach (var item in setWeights.Where(x => !x.Equal))
+                        Console.WriteLine($"  SET-WEIGHT exercise={item.ExerciseId} EGYM=[{string.Join(",", item.EgymKg)}] Garmin=[{string.Join(",", item.GarminKg)}] reviewOnly");
                     var structure = StrengthSessionCompleteness.Check(egymCounts, garminCounts, Ids, 2);
                     var reps = RepetitionMatcher.Compare(egymReps, garminReps);
                     Console.WriteLine($"  mappedSetsComplete={structure.Issues.All(x => x.Side == CompletenessSide.Garmin && x.Reason == "UnexpectedExercise")} repsEqual={reps.Count == Ids.Length && reps.All(x => x.Status == RepetitionStatus.Equal)}");
