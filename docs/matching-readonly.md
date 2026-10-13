@@ -421,3 +421,15 @@ User clarification:
 4. **Write gate unchanged:** build a dry-run preview of old/new historical exercise weights (and separately flag repetition anomalies), validate source semantics including negative/eccentric mode, create/verifiably restore full raw Garmin backup, account for version/concurrency and unsupported API risk, and get explicit per-scope user approval before any Garmin mutation.
 
 This supersedes the earlier hypothetical bike-distance write candidate as a development priority. No Garmin write method has been authorized.
+
+## First historical weight dry-run preview — 2026-10-13 (pending CI + live validation)
+
+The read-only Garmin CLI now offers a narrow candidate-only command for the **2026-08-31** matched activity (Garmin ID `24180037460`):
+
+```powershell
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --weight-preview-aug31
+```
+
+It reuses the independently verified live session matcher and strength comparison, and displays only **different** weight values as `Garmin old kg -> EGYM candidate kg` using invariant decimal formatting. The preview refuses to generate candidates unless there is an unambiguously matched session, a strictly complete circuit, exactly eight unique mapped exercise weights and fully reviewable comparable weights. Matching weights are left untouched. Fixture tests cover Aug31's expected seven candidates, extra UNKNOWN/unreviewable cases, and a method conflict. This conservative first preview does not yet handle within-exercise varying set weights (e.g., Jul 8).
+
+**Not write-ready:** no backup, no restore test, no Garmin write method, no negative/eccentric resistance semantic verification, no user approval to mutate anything. Repetitions, cardio, calories, HR, timestamps and workout templates are outside the preview's proposed changes.
