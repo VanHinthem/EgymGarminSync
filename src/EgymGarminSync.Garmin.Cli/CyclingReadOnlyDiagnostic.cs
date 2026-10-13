@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using EgymGarminSync.Egym;
+using Garmin.Connect;
 using Garmin.Connect.Auth;
 
 namespace EgymGarminSync.Garmin.Cli;
