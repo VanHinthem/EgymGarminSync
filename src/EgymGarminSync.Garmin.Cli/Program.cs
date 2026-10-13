@@ -1,3 +1,4 @@
+using EgymGarminSync.Matching;
 using System.Text.Json;
 using EgymGarminSync.Garmin.Cli;
 using Garmin.Connect;
@@ -90,6 +91,14 @@ try
             var sets = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{id}/exerciseSets");
             Console.WriteLine("  Exercise-set response root keys: " + SafeKeys(sets));
             PrintActivitySets(sets);
+            if (args.Contains("--circuit-check", StringComparer.OrdinalIgnoreCase))
+            {
+                var countRecords = CircuitJsonNormalizer.GarminCounts(sets);
+                var expectedIds = new long[] { 333, 334, 581, 330, 335, 329, 331, 332 };
+                var expected = expectedIds.Select(id => ExerciseIdentityMapping.TryGetGarminKey(id, out var key) ? key : null).ToArray();
+                var valid = expected.All(key => key is not null && countRecords.Count(x => x.Category == key.Category && x.ExerciseName == key.ExerciseName) == 2) && countRecords.Count == 16;
+                Console.WriteLine($"    Garmin circuit completeness: 16 strength records expected; actual={countRecords.Count}; twoSetsEach={valid}");
+            }
         }
         catch (Exception ex)
         {
