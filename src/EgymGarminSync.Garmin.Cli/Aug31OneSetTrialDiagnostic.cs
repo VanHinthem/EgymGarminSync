@@ -55,6 +55,16 @@ internal static class Aug31OneSetTrialDiagnostic
             Console.WriteLine($"READ-ONLY Aug31 live freshness check passed: activity={id}, 36 saved sets match Garmin.");
             Console.WriteLine($"ONE SET ONLY: Chest Press setIndex={change.SetIndex}: {change.OldWeightGrams / 1000m} -> {change.NewWeightGrams / 1000m} kg.");
             Console.WriteLine("Proposed replacement JSON built in memory; all other JSON fields verified equal.");
+            try
+            {
+                GarminExerciseSetsWriteContract.Validate(preview.ProposedJson, id);
+                Console.WriteLine("Garmin replace-all required-field check: passed (unofficial contract).");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Garmin replace-all required-field check: BLOCKED ({ex.Message})");
+                Console.WriteLine("Do not synthesize missing activityId/startTime fields: investigate original Garmin request format.");
+            }
             Console.WriteLine("NO PUT/POST, no restore, no Garmin writes. Update contract still requires validation.");
             return 0;
         }
