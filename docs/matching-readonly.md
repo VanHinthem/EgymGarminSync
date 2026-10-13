@@ -31,3 +31,14 @@ This branch starts with a pure comparison module, without new login attempts or 
 - Unknown methods, unmatched dates, duplicate IDs or non-UTC timestamps fail explicitly.
 - No automatic link on calendar date alone, and no implicit template/activity association.
 - Next: obtain actual Garmin start timestamps alongside EGYM completion timestamps, normalize the timezones, and verify confidence before enabling cross-system comparisons.
+
+## Live timing diagnostic commands
+
+Run these from the feature branch after CI is green, using already configured EGYM/Garmin credentials:
+
+```powershell
+dotnet run --project src/EgymGarminSync.Cli/EgymGarminSync.Cli.csproj -- --matching-times 180
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --matching-times
+```
+
+The EGYM diagnostic displays raw `completedAt`, `timezone`, and strength training methods; its timestamps are **not automatically interpreted as UTC**. The Garmin diagnostic lists the relevant activities with `startTimeGMT` labelled as UTC and `duration` seconds. Neither diagnostic links workouts yet, and both are GET-only. Compare multiple known days, including 2026-08-31 and 2026-08-07, before calibrating the session tolerance. Do not infer a clock offset from one sample or assume completion equals Garmin start.
