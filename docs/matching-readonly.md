@@ -154,3 +154,20 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 ```
 
 This reuses the existing session matching, structural checks and weight comparison rather than creating a second comparison implementation. The previously verified negative workout continues to use `--compare-aug31`. Live positive comparison results must be examined before any broader historical matching.
+
+## Positive live comparison verified — 2026-10-13
+
+The user successfully executed `--compare-aug07` against both live read-only APIs. Session `2026-08-07` matched Garmin activity `23883291887` with start-to-EGYM-completion elapsed `00:45:57.590`, structural completeness `True` and `reviewable=True`.
+
+| EGYM activity ID | Exercise | EGYM observed kg | Garmin observed kg | EGYM − Garmin kg |
+|---:|---|---:|---:|---:|
+| 329 | Leg Extension | 28 | 23 | +5 |
+| 330 | Abdominal Crunch | 35 | 30 | +5 |
+| 331 | Back Extension | 50 | 51 | -1 |
+| 332 | Leg Curl | 29 | 27 | +2 |
+| 333 | Chest Press | 27 | 27 | 0 |
+| 334 | Seated Row | 40 | 36 | +4 |
+| 335 | Lat Pulldown | 40 | 36 | +4 |
+| 581 | Leg Press | 115 | 103 | +12 |
+
+Seven differences and one equal reading, despite structurally complete sets. Observations only; this does **not** establish that Garmin values should be overwritten. Exact unit and machine-load semantics still require verification, including for positive workouts. No writes occurred.
