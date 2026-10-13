@@ -192,3 +192,13 @@ The user ran both combined read-only diagnostics after repetition support was ad
 The combined read-only report now holds `Repetitions` and `RepetitionsAllEqual` independently from `HasReviewableDifferences` (weight comparison status). Live output labels these separately as `weightReviewable` and `repetitionsAllEqual`, so a positive session with two 19-rep second sets does not appear fully matching just because the circuit is structurally complete.
 
 Missing repetition inputs do not imply equality. Unit tests cover the observed Aug 7 mismatches and Aug 31 equality. This is for human review only, not an authorization to write.
+
+## Historical session candidates — first live validation
+
+The Garmin CLI now offers `--history-match`, which uses **GET only** to retrieve EGYM workouts for 180 days and the 100 most recent Garmin activities. It converts EGYM local completion times using each workout's `timezone`, normalizes Garmin `startTimeGMT` to UTC, and runs `WorkoutSessionMatcher` over the full two-sided candidate sets at once.
+
+```powershell
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --history-match
+```
+
+The output contains `Matched`, `MethodConflict`, `Ambiguous`, `NoCandidate` and `UnsupportedMethod` plus a summary. It intentionally **does not fetch all Garmin exercise sets** or claim that matched sessions have verified reps and weights. That will be a separate small slice once date/method pairing is checked. Garmin's latest-100-activities listing and EGYM's 180-day period have different coverage, so `NoCandidate` can indicate an unlisted Garmin activity rather than a missing workout. Incomplete or invalid EGYM timestamp data is excluded explicitly. The candidate window remains an engineering-only 0–120 minutes. No write paths exist.
