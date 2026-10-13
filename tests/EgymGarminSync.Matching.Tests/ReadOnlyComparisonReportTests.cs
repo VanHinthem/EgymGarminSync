@@ -54,4 +54,37 @@ public sealed class ReadOnlyComparisonReportTests
         Assert.Empty(report.Differences);
         Assert.False(report.Completeness!.IsComplete);
     }
+    [Fact]
+    public void PositiveRepetitionMismatchIsSeparateFromWeightReview()
+    {
+        var report = ReadOnlyComparisonReport.Build(
+            new("aug07", 23883291887, SessionMatchStatus.Matched, TimeSpan.FromMinutes(46)),
+            Entries.Select(e => new EgymExerciseSetCount(e.Id, 2)).ToArray(),
+            Entries.Select(e => new GarminExerciseSetCount(e.Category, e.Name, 2, true)).ToArray(),
+            Entries.Select(e => new EgymExerciseWeight(e.Id, e.Egym)).ToArray(),
+            Entries.SelectMany(e => Enumerable.Repeat(new GarminRecordedSet(e.Category, e.Name, e.Garmin * 1000m, true), 2)).ToArray(),
+            Ids,
+            egymReps: Entries.Select(e => new EgymExerciseReps(e.Id, e.Id is 332 or 334 ? [20, 19] : [20, 20])).ToArray(),
+            garminReps: Entries.SelectMany(e => Enumerable.Repeat(new GarminExerciseReps(e.Category, e.Name, 20, true), 2)).ToArray());
+        Assert.True(report.HasReviewableDifferences);
+        Assert.False(report.RepetitionsAllEqual);
+        Assert.Equal(2, report.Repetitions.Count(x => x.Status == RepetitionStatus.Different));
+    }
+
+    [Fact]
+    public void NegativeIdenticalRepetitionsAreReportedEqual()
+    {
+        var report = ReadOnlyComparisonReport.Build(
+            new("aug31", 24180037460, SessionMatchStatus.Matched, TimeSpan.FromMinutes(44)),
+            Entries.Select(e => new EgymExerciseSetCount(e.Id, 2)).ToArray(),
+            Entries.Select(e => new GarminExerciseSetCount(e.Category, e.Name, 2, true)).ToArray(),
+            Entries.Select(e => new EgymExerciseWeight(e.Id, e.Egym)).ToArray(),
+            Entries.SelectMany(e => Enumerable.Repeat(new GarminRecordedSet(e.Category, e.Name, e.Garmin * 1000m, true), 2)).ToArray(),
+            Ids,
+            egymReps: Entries.Select(e => new EgymExerciseReps(e.Id, [15, 15])).ToArray(),
+            garminReps: Entries.SelectMany(e => Enumerable.Repeat(new GarminExerciseReps(e.Category, e.Name, 15, true), 2)).ToArray());
+        Assert.True(report.RepetitionsAllEqual);
+        Assert.Equal(8, report.Repetitions.Count);
+    }
+
 }
