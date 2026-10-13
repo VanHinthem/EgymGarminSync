@@ -13,7 +13,7 @@ internal static class CombinedReadOnlyDiagnostic
 {
     private static readonly long[] MachineIds = [333, 334, 581, 330, 335, 329, 331, 332];
 
-    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin, DateOnly trainingDate, long garminActivityId)
+    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin, DateOnly trainingDate, long garminActivityId, bool previewWeights = false)
     {
         var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
         var password = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
@@ -127,6 +127,18 @@ internal static class CombinedReadOnlyDiagnostic
         foreach (var difference in report.Differences.OrderBy(x => x.EgymActivityId))
             Console.WriteLine($"  EGYM id={difference.EgymActivityId}: EGYM={difference.EgymKg} kg, " +
                 $"Garmin={difference.GarminKg} kg, delta={difference.DeltaKg} kg, status={difference.Status}");
+        if (previewWeights)
+        {
+            Console.WriteLine("HISTORICAL WEIGHT DRY RUN — NOT WRITE-READY");
+            var candidates = HistoricalWeightPreview.Build(report);
+            Console.WriteLine($"  activity={garminActivityId}; proposedExerciseChanges={candidates.Count}");
+            foreach (var candidate in candidates)
+                Console.WriteLine($"  exercise={candidate.ExerciseId} Garmin={candidate.GarminKg.ToString(CultureInfo.InvariantCulture)} kg" +
+                    $" -> EGYM={candidate.EgymKg.ToString(CultureInfo.InvariantCulture)} kg" +
+                    $" (delta={candidate.DifferenceKg.ToString(CultureInfo.InvariantCulture)} kg)");
+            Console.WriteLine("  BLOCKED: no full backup/restore validation, negative-resistance semantic validation or write authorization.");
+            Console.WriteLine("  Untouched: reps, heart rate, calories, cycling, REST sets, timestamps and templates.");
+        }
         Console.WriteLine("No Garmin or EGYM writes. Negative-method resistance semantics still need verification.");
         return report.HasReviewableDifferences ? 0 : 1;
     }
