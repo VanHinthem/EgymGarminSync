@@ -130,9 +130,9 @@ internal static class CombinedReadOnlyDiagnostic
         if (previewWeights)
         {
             Console.WriteLine("HISTORICAL WEIGHT DRY RUN — NOT WRITE-READY");
-            var candidates = HistoricalWeightPreview.Build(report);
-            Console.WriteLine($"  activity={garminActivityId}; proposedExerciseChanges={candidates.Count}");
-            foreach (var candidate in candidates)
+            var proposedChanges = HistoricalWeightPreview.Build(report);
+            Console.WriteLine($"  activity={garminActivityId}; proposedExerciseChanges={proposedChanges.Count}");
+            foreach (var candidate in proposedChanges)
                 Console.WriteLine($"  exercise={candidate.ExerciseId} Garmin={candidate.GarminKg.ToString(CultureInfo.InvariantCulture)} kg" +
                     $" -> EGYM={candidate.EgymKg.ToString(CultureInfo.InvariantCulture)} kg" +
                     $" (delta={candidate.DifferenceKg.ToString(CultureInfo.InvariantCulture)} kg)");
