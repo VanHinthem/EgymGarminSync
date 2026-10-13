@@ -6,6 +6,7 @@ using Garmin.Connect.Auth;
 namespace EgymGarminSync.Garmin.Cli;
 
 /// <summary>Per-Windows-user encrypted OAuth cache. Never persists passwords or plaintext tokens.</summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsGarminTokenCache : ITokenCache
 {
     private readonly string _path;
