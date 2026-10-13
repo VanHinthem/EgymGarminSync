@@ -26,6 +26,20 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--matching-times", StringComparer.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("Read-only Garmin EGYM activity timestamps (GMT from Garmin):");
+        var activities = await client.GetActivities(0, 100);
+        tokenCache.ClearLoginCooldown();
+        foreach (var activity in activities.Where(a => a.ActivityName is "EGYM Positief" or "EGYM Negatief"))
+        {
+            // Garmin's startTimeGMT is represented as DateTime without an offset.
+            // Attach UTC explicitly, never implicitly convert using the computer timezone.
+            var utcStart = DateTime.SpecifyKind(activity.StartTimeGmt, DateTimeKind.Utc);
+            Console.WriteLine($"  {activity.ActivityId} | {activity.ActivityName} | startUtc={utcStart:O} | durationSeconds={activity.Duration:F0}");
+        }
+        return 0;
+    }
     Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
     Console.WriteLine($"Step 1 OK: {workouts.Length} workouts");
