@@ -311,3 +311,9 @@ After the mapped-set comparison and per-set weight review changes, user reran `-
 - No update permission follows from `weightReviewable=True`; resistance semantics remain unverified. All work is read-only.
 
 Next consideration: finalize a concise status model separating `ExpectedMappedSetsComplete`, `ExtraUnknownRecords`, `RepetitionDifferences` and `PerSetWeightDifferences`; improve output labels before backup/diff/write design.
+
+## Consolidated read-only training review summary — pending CI/live check
+
+A new pure `TrainingReviewSummary.Build` returns four independent review dimensions for each matched historical session: `ExpectedMappedSetsComplete`, `ExtraGarminRecords`, `RepetitionDifferences`, and `ExerciseWeightDifferences` (the latter compares the two actual per-set weights as an unordered multiset). The historical CLI now prints a `SUMMARY` row per matched session in addition to existing details; all values remain observations only. Unknown comparison coverage is represented by `null`, not zero. An extra unknown Garmin ACTIVE set does not imply missing expected mapped sets. Three tests cover extra UNKNOWN with a real mapped repetition difference, missing expected set, and variable EGYM set weights.
+
+The output still uses existing full-detail diagnostics and does not provide or enable a Garmin write path. Validate on CI then run `--history-compare 27` to confirm expected values on Jul 8, Jun 15 and May 4.
