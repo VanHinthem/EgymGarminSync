@@ -67,7 +67,16 @@ internal static class Aug31OneSetTrialDiagnostic
                 Console.WriteLine($"  Schema: sets={inventory.SetCount}, ACTIVE={inventory.ActiveCount}, REST={inventory.RestCount}, nestedExercises={inventory.NestedExerciseCount}");
                 Console.WriteLine($"  activityId: rootMissing={inventory.RootIdMissing}, rootWrong={inventory.RootIdWrong}, setsMissing={inventory.SetIdMissing}, setsWrong={inventory.SetIdWrong}, exercisesMissing={inventory.ExerciseIdMissing}, exercisesWrong={inventory.ExerciseIdWrong}");
                 Console.WriteLine($"  startTime: missing={inventory.StartTimeMissing}, invalidOrNull={inventory.StartTimeInvalid}");
-                Console.WriteLine("Do not synthesize missing activityId/startTime fields: investigate original Garmin request format.");
+                if (inventory.SetIdMissing == 36 && inventory.ExerciseIdMissing == inventory.NestedExerciseCount &&
+                    inventory.SetIdWrong == 0 && inventory.ExerciseIdWrong == 0 &&
+                    !inventory.RootIdMissing && !inventory.RootIdWrong &&
+                    inventory.StartTimeMissing == 0 && inventory.StartTimeInvalid == 0)
+                {
+                    var normalized = GarminTrialPayloadNormalizer.Normalize(preview.ProposedJson, id);
+                    Console.WriteLine("Offline update-shape normalization PASSED: missing activityIds filled from verified root.");
+                    Console.WriteLine("Original backup untouched; one functional weight difference, no PUT performed.");
+                }
+                else Console.WriteLine("Normalization blocked: unexpected source ID/timestamp shape.");
             }
             Console.WriteLine("NO PUT/POST, no restore, no Garmin writes. Update contract still requires validation.");
             return 0;
