@@ -43,3 +43,16 @@ This is an **observed candidate mapping**, not yet validated across all sessions
 - Print all sets in the compact CLI (the former debug output truncated arrays after 25 items).
 - Validate cross-system workout matching by local dates/times, and address missing or extra sets.
 - Any eventual Garmin PUT must retain unchanged REST, cycling, nested group and unrelated metadata, make backups, show a full diff and require explicit approval.
+
+## Follow-up confirmation — 2026-10-13
+
+After the earlier Garmin SSO error, the Windows CLI successfully authenticated and retrieved both complete templates and both activity exercise-set collections. This confirms the read path is operational again; token **reuse** and encrypted on-disk DPAPI state still require explicit verification (the console output alone does not establish a cache hit).
+
+- Both templates: 2 repeat iterations with the same eight strength steps; positive target 20 reps and negative target 15 reps.
+- Both sampled activity responses: exactly 36 records = 18 ACTIVE + 18 REST. ACTIVE comprises 16 strength sets (two per exercise) and two bike sessions.
+- All 16 strength sets were present, across both rounds, and the exercise identity/reps/weight values matched within each variant's two rounds.
+- Negative samples show Garmin activity weight 22000 for BENCH_PRESS, 31000 for ROW, 89000 for LEG_PRESS, 24000 for abdominal crunch, 33000 for LAT_PULLDOWN, 20000 for leg extension, 43000 for back extension, and 22000 for leg curl.
+- Positive samples show 27000, 36000, 103000, 30000, 36000, 23000, 51000, and 27000 in the same exercise order. Garmin activities plausibly store grams; confirm formally before writes.
+- Bike and REST records have no resistance weight and must remain unchanged.
+
+Prior pending item *print all sets* is now resolved. The other validation and write-safety items remain open.
