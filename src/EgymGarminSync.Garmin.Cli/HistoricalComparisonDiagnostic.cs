@@ -121,6 +121,11 @@ internal static class HistoricalComparisonDiagnostic
                 }
                 var report = ReadOnlyComparisonReport.Build(match, egymCounts, garminCounts,
                     egymWeights, recorded, Ids, egymReps: egymReps, garminReps: garminReps);
+                if (garminReps.Any(r => r.Repetitions == 0))
+                {
+                    Console.WriteLine("  ZERO-REP Garmin ACTIVE strength set detected; raw details:");
+                    PrintSetDetails(workout, raw);
+                }
                 if (report.Completeness is { IsComplete: false } incomplete)
                 {
                     foreach (var issue in incomplete.Issues)
