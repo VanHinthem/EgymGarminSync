@@ -12,10 +12,8 @@ namespace EgymGarminSync.Garmin.Cli;
 internal static class CombinedReadOnlyDiagnostic
 {
     private static readonly long[] MachineIds = [333, 334, 581, 330, 335, 329, 331, 332];
-    private const long GarminActivityId = 24180037460;
-    private static readonly DateOnly TrainingDate = new(2026, 8, 31);
 
-    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin)
+    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin, DateOnly trainingDate, long garminActivityId)
     {
         var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
         var password = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
@@ -25,11 +23,11 @@ internal static class CombinedReadOnlyDiagnostic
             return 1;
         }
 
-        Console.WriteLine("Comparing 2026-08-31 (GET only; all weights are provisional observations).");
+        Console.WriteLine($"Comparing {trainingDate:yyyy-MM-dd} (GET only; all weights are provisional observations).");
         using var egym = new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"), email, password);
-        var workouts = await egym.GetWorkoutsAsync(TrainingDate, TrainingDate);
+        var workouts = await egym.GetWorkoutsAsync(trainingDate, trainingDate);
         // Require exactly one full candidate on this local calendar date.
-        var candidates = workouts.Where(w => ParseLocalDate(w) == TrainingDate).ToArray();
+        var candidates = workouts.Where(w => ParseLocalDate(w) == trainingDate).ToArray();
         if (candidates.Length != 1)
         {
             Console.WriteLine($"EGYM sessions on target date: {candidates.Length}; refusing ambiguous association.");
@@ -73,7 +71,7 @@ internal static class CombinedReadOnlyDiagnostic
         } : EgymTrainingMethod.Unknown;
 
         var activities = await garmin.GetActivities(0, 100);
-        var activity = activities.SingleOrDefault(a => a.ActivityId == GarminActivityId);
+        var activity = activities.SingleOrDefault(a => a.ActivityId == garminActivityId);
         if (activity is null)
         {
             Console.WriteLine("Known Garmin activity not found in recent-activity list; no comparison.");
@@ -98,7 +96,7 @@ internal static class CombinedReadOnlyDiagnostic
         }
 
         var raw = await context.GetAndDeserialize<JsonElement>(
-            $"/activity-service/activity/{GarminActivityId}/exerciseSets");
+            $"/activity-service/activity/{garminActivityId}/exerciseSets");
         var garminCounts = CircuitJsonNormalizer.GarminCounts(raw);
         var recorded = new List<GarminRecordedSet>();
         foreach (var set in raw.GetProperty("exerciseSets").EnumerateArray())
