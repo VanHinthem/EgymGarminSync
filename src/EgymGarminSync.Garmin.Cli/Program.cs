@@ -33,6 +33,12 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--backup-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await GarminActivitySnapshot.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--cycling-aug31", StringComparer.OrdinalIgnoreCase))
     {
         var result = await CyclingReadOnlyDiagnostic.RunAsync(context);
