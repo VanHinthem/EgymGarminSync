@@ -121,8 +121,9 @@ internal static class CombinedReadOnlyDiagnostic
         }
 
         var report = ReadOnlyComparisonReport.Build(session, egymCounts, garminCounts,
-            weights, recorded, MachineIds);
-        Console.WriteLine($"Complete={report.Completeness?.IsComplete}; reviewable={report.HasReviewableDifferences}; {report.Reason}");
+            weights, recorded, MachineIds, egymReps: RepetitionJsonNormalizer.Egym(workout),
+            garminReps: RepetitionJsonNormalizer.Garmin(raw));
+        Console.WriteLine($"Complete={report.Completeness?.IsComplete}; weightReviewable={report.HasReviewableDifferences}; repetitionsAllEqual={report.RepetitionsAllEqual}; {report.Reason}");
         foreach (var difference in report.Differences.OrderBy(x => x.EgymActivityId))
             Console.WriteLine($"  EGYM id={difference.EgymActivityId}: EGYM={difference.EgymKg} kg, " +
                 $"Garmin={difference.GarminKg} kg, delta={difference.DeltaKg} kg, status={difference.Status}");
