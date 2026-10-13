@@ -1,0 +1,89 @@
+using System.Globalization;
+using System.Text.Json;
+using EgymGarminSync.Egym;
+using Garmin.Connect.Auth;
+
+namespace EgymGarminSync.Garmin.Cli;
+
+/// <summary>Inspect cycling segments only. Never changes Garmin or EGYM data.</summary>
+internal static class CyclingReadOnlyDiagnostic
+{
+    public static async Task<int> RunAsync(GarminConnectContext context)
+    {
+        var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
+        var password = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            Console.Error.WriteLine("Set EGYM_EMAIL and EGYM_PASSWORD.");
+            return 1;
+        }
+
+        var date = new DateOnly(2026, 8, 31);
+        using var client = new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"), email, password);
+        var workouts = await client.GetWorkoutsAsync(date, date);
+        var candidates = workouts.Where(w =>
+            DateOnly.FromDateTime(DateTime.Parse(w.GetProperty("completedAt").GetString()!, CultureInfo.InvariantCulture)) == date).ToArray();
+        if (candidates.Length != 1)
+        {
+            Console.WriteLine($"Found {candidates.Length} EGYM sessions on {date:yyyy-MM-dd}; aborting.");
+            return 1;
+        }
+
+        var workout = candidates[0];
+        Console.WriteLine("EGYM cycling entries (2026-08-31):");
+        var bikes = workout.GetProperty("exercises").EnumerateArray()
+            .Where(x => x.GetProperty("activity").GetProperty("activityId").GetInt64() == 31).ToArray();
+        Console.WriteLine($"  Bike segments={bikes.Length}");
+        foreach (var (bike, index) in bikes.Select((x, i) => (x, i)))
+        {
+            Console.WriteLine($"  EGYM bike segment {index + 1}:");
+            PrintFields(bike, ["completedAt", "kiloCalories", "summary", "hrmData"]);
+            var sets = bike.GetProperty("sets").EnumerateArray().ToArray();
+            Console.WriteLine($"    sets={sets.Length}");
+            foreach (var (set, setIndex) in sets.Select((x, i) => (x, i)))
+            {
+                Console.Write($"    set {setIndex + 1}: ");
+                PrintFields(set, ["setType", "duration", "distance", "speed", "heartRate", "incline", "recoveryTime", "numberOfReps", "weight"]);
+            }
+        }
+
+        var response = await context.GetAndDeserialize<JsonElement>(
+            "/activity-service/activity/24180037460/exerciseSets");
+        Console.WriteLine("Garmin INDOOR_BIKE ACTIVE entries (activity 24180037460):");
+        var matched = 0;
+        foreach (var (set, index) in response.GetProperty("exerciseSets").EnumerateArray().Select((x, i) => (x, i)))
+        {
+            if (set.GetProperty("setType").GetString() != "ACTIVE") continue;
+            if (!set.TryGetProperty("exercises", out var identities) || identities.ValueKind != JsonValueKind.Array) continue;
+            if (!identities.EnumerateArray().Any(e =>
+                    e.TryGetProperty("category", out var category) && category.GetString() == "INDOOR_BIKE")) continue;
+            matched++;
+            Console.WriteLine($"  Garmin bike record {index}:");
+            PrintFields(set, ["setType", "startTime", "duration", "durationInSeconds", "distance", "distanceInMeters",
+                "speed", "averageSpeed", "heartRate", "averageHeartRate", "calories", "power", "watts", "repetitionCount", "weight"]);
+            Console.WriteLine("    available scalar field names: " +
+                string.Join(", ", set.EnumerateObject().Where(p => p.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+                    .Select(p => p.Name)));
+        }
+        Console.WriteLine($"  Garmin bike records={matched}");
+        Console.WriteLine("Values are raw, with units unverified. No automatic segment pairing or writes.");
+        return bikes.Length == 2 && matched == 2 ? 0 : 1;
+    }
+
+    private static void PrintFields(JsonElement source, string[] fields)
+    {
+        foreach (var key in fields)
+        {
+            if (!source.TryGetProperty(key, out var value)) continue;
+            if (value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+            {
+                Console.WriteLine($"    {key}: structured ({value.ValueKind}); fields=" +
+                    (value.ValueKind == JsonValueKind.Object
+                        ? string.Join(",", value.EnumerateObject().Select(p => p.Name).Take(15))
+                        : $"array length={value.GetArrayLength()}"));
+            }
+            else
+                Console.WriteLine($"    {key}={value}");
+        }
+    }
+}
