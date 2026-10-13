@@ -143,3 +143,14 @@ The user successfully ran `--compare-aug31` on Windows against both EGYM and Gar
 | 581 | Leg Press | 95 | 89 | +6 |
 
 Seven exercise weights differed; one was equal. All values are **observations only**, assuming the Garmin raw weight-to-kg conversion. Negative EGYM resistance semantics are not yet verified and this output is not approval for writes. No mutation API was used.
+
+## Positive workout comparison (2026-08-07)
+
+The same integrated GET-only comparison is now reusable for the known positive workout on **2026-08-07**, Garmin activity `23883291887`. No weights or exercise identities have been changed, and no write endpoints are called.
+
+```powershell
+# From feature/3-readonly-matching after CI succeeds:
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --compare-aug07
+```
+
+This reuses the existing session matching, structural checks and weight comparison rather than creating a second comparison implementation. The previously verified negative workout continues to use `--compare-aug31`. Live positive comparison results must be examined before any broader historical matching.
