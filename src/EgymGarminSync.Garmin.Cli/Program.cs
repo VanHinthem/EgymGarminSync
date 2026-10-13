@@ -39,6 +39,13 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Contains("--weight-preview-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await CombinedReadOnlyDiagnostic.RunAsync(context, client,
+            new DateOnly(2026, 8, 31), 24180037460L, previewWeights: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--history-compare", StringComparer.OrdinalIgnoreCase))
     {
         // Initially cap historical exercise-set GET requests. Optional second argument
