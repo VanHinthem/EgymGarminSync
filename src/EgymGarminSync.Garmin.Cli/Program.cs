@@ -131,6 +131,14 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Length == 1 && args[0].Equals("--history-remaining", StringComparison.OrdinalIgnoreCase))
+    {
+        // GET-only: enumerate matched historical sessions except the verified Aug31 correction.
+        var result = await HistoricalComparisonDiagnostic.RunAsync(context, client,
+            maxSessions: 30, excludeCorrectedAugust31: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--history-compare", StringComparer.OrdinalIgnoreCase))
     {
         // Initially cap historical exercise-set GET requests. Optional second argument
