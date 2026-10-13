@@ -317,3 +317,17 @@ Next consideration: finalize a concise status model separating `ExpectedMappedSe
 A new pure `TrainingReviewSummary.Build` returns four independent review dimensions for each matched historical session: `ExpectedMappedSetsComplete`, `ExtraGarminRecords`, `RepetitionDifferences`, and `ExerciseWeightDifferences` (the latter compares the two actual per-set weights as an unordered multiset). The historical CLI now prints a `SUMMARY` row per matched session in addition to existing details; all values remain observations only. Unknown comparison coverage is represented by `null`, not zero. An extra unknown Garmin ACTIVE set does not imply missing expected mapped sets. Three tests cover extra UNKNOWN with a real mapped repetition difference, missing expected set, and variable EGYM set weights.
 
 The output still uses existing full-detail diagnostics and does not provide or enable a Garmin write path. Validate on CI then run `--history-compare 27` to confirm expected values on Jul 8, Jun 15 and May 4.
+
+## Consolidated history summary verified live — 2026-10-13
+
+User ran `--history-compare 27` with consolidated `SUMMARY` lines. Results across **27** matched exercises-set histories: expected mapped strength sets complete on **27/27**; exactly **2** extra Garmin UNKNOWN records (2026-06-15 and 2026-05-04); **8** exercise-level repetition differences across **7** sessions; **124** exercise-level set-weight differences (comparison of two-set values per exercise, not 124 individual edited set records); 0 diagnostic errors; no writes. The additional EGYM session on 2026-06-24 remains method-conflicted and excluded.
+
+Verified exceptions:
+- Jul 8: expected sets complete, zero extras, one Leg Press repetition discrepancy, seven exercises with set-weight differences; EGYM Leg Extension [29,28] kg and Lat Pulldown [39,40] kg retained.
+- Jun 15: expected sets complete, one extra Garmin UNKNOWN, zero repetition differences, six exercise-level weight differences.
+- May 4: expected sets complete, one extra Garmin UNKNOWN, one Chest Press repetition discrepancy, zero weight differences.
+- Aug 5 and Jun 8: zero repetitions inside known mapped Garmin strength sets remain flagged.
+
+Output improvement: summary lines now prefix the local workout date and Garmin activity ID, so each row is unambiguous in long logs. This presentation change is pending CI verification.
+
+All weight semantics and safe Garmin write operations remain unverified and not authorized.
