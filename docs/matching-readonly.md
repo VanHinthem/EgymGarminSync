@@ -112,3 +112,17 @@ The user executed both `--circuit-check` commands on Windows with real, read-onl
 The 2026-08-31 fixture uses the previously observed EGYM and Garmin negative workout values, yielding eight comparisons (seven differences, one equal). These are **unit-test fixtures sourced from separate observed API output**, not proof of an end-to-end integrated live report. Cross-system units and negative resistance meanings remain unverified: displayed differences are for review, never a recommendation to overwrite recorded Garmin sets.
 
 Next: connect normalized live read-only API data to the combined report and validate session identity before interpreting weight differences.
+
+## Live combined diagnostic — initial single-session slice
+
+The Garmin read-only CLI now includes a narrowly scoped integration for the **2026-08-31** EGYM negative workout and known Garmin activity `24180037460`:
+
+```powershell
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --compare-aug31
+```
+
+This command requires both `GARMIN_EMAIL`/`GARMIN_PASSWORD` and `EGYM_EMAIL`/`EGYM_PASSWORD`, plus optional `EGYM_BASE_URL`. It retrieves EGYM workouts for one date and Garmin recent activity metadata and recorded sets via **GET only**. It requires exactly one EGYM workout for the day, converts its gym-local completion timestamp with the returned `timezone`, uses the verified Garmin activity ID, checks method and forward-only timing, validates both circuits, then prints a read-only difference per mapped machine.
+
+No state changes or update endpoints exist on this path. A successful printed difference is **not approval** to update Garmin, because EGYM negative resistance semantics and cross-system units are not conclusively validated.
+
+The CLI is intentionally restricted to this observed activity for the first live test. CI compilation and a Windows live run are still required; verify output before generalizing to automatic multi-session matching.
