@@ -52,7 +52,7 @@ internal static class OfflineSnapshotPreflight
             Console.WriteLine($"  setIndex={item.SetIndex} EGYM id={item.EgymActivityId}: " +
                 $"{item.OldWeightGrams / 1000m} -> {item.NewWeightGrams / 1000m} kg");
         Console.WriteLine("Verified: no proposed non-weight changes. Proposed JSON retained in memory only.");
-        Console.WriteLine("NOT WRITE-READY: Garmin restoration remains unverified. No network or Garmin writes.");
+        Console.WriteLine("REVIEW ONLY: single-set Garmin restore tested; bulk correction not yet authorized or verified. No Garmin writes.");
         return 0;
     }
 
