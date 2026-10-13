@@ -81,3 +81,16 @@ The independent `StrengthSessionCompleteness.Check` checks a caller-specified se
 The checker reports missing/duplicate EGYM exercises, missing/extra Garmin strength sets, unmapped IDs, and unexpected exercises. It does not modify workouts or claim that all sessions are complete. Ingestion must still derive `IsActiveStrength` reliably from Garmin's recorded set type and exercise category.
 
 **Important:** These are structural checks only. Same set count does not prove exact set-to-set correspondence, equal reps, or valid resistance units. Incomplete and conflicting sessions must never authorize an automatic write.
+
+## Real API JSON structural diagnostics (next validation)
+
+`CircuitJsonNormalizer` now interprets the actual EGYM `exercises[].activity.activityId / sets[]` shape and Garmin `exerciseSets[]` shape. Garmin REST and bike records are omitted; multiple identical names in one set are treated as one set. Mixed identities, missing arrays and unknown set types fail closed.
+
+Both existing read-only CLIs expose a diagnostic. **These check each source separately; there is not yet a combined cross-system report.**
+
+```powershell
+dotnet run --project src/EgymGarminSync.Cli/EgymGarminSync.Cli.csproj -- --circuit-check 180
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --circuit-check
+```
+
+EGYM checks the most recent twelve workouts for eight mapped machines with exactly two sets each. Garmin checks two previously verified sample activity IDs for sixteen strength set records. Neither command modifies Garmin, and neither authorizes linking mismatched methods, incomplete sessions or weight updates. Both need local CI and live output verification.
