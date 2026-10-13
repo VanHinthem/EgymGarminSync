@@ -98,6 +98,12 @@ internal static class CombinedReadOnlyDiagnostic
         var raw = await context.GetAndDeserialize<JsonElement>(
             $"/activity-service/activity/{garminActivityId}/exerciseSets");
         var garminCounts = CircuitJsonNormalizer.GarminCounts(raw);
+        var repDiffs = RepetitionMatcher.Compare(
+            RepetitionJsonNormalizer.Egym(workout), RepetitionJsonNormalizer.Garmin(raw));
+        Console.WriteLine("Repetitions per strength exercise (individual sets; no sequence assumption):");
+        foreach (var reps in repDiffs.OrderBy(x => x.EgymActivityId))
+            Console.WriteLine($"  EGYM id={reps.EgymActivityId}: EGYM=[{string.Join(",", reps.EgymReps)}], Garmin=[{string.Join(",", reps.GarminReps)}], status={reps.Status}");
+        Console.WriteLine($"Repetitions all equal: {repDiffs.Count == MachineIds.Length && repDiffs.All(x => x.Status == RepetitionStatus.Equal)}");
         var recorded = new List<GarminRecordedSet>();
         foreach (var set in raw.GetProperty("exerciseSets").EnumerateArray())
         {
