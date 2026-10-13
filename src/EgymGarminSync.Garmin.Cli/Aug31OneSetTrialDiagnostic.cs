@@ -63,6 +63,10 @@ internal static class Aug31OneSetTrialDiagnostic
             catch (InvalidOperationException ex)
             {
                 Console.WriteLine($"Garmin replace-all required-field check: BLOCKED ({ex.Message})");
+                var inventory = GarminExerciseSetsWriteContract.Inspect(preview.ProposedJson, id);
+                Console.WriteLine($"  Schema: sets={inventory.SetCount}, ACTIVE={inventory.ActiveCount}, REST={inventory.RestCount}, nestedExercises={inventory.NestedExerciseCount}");
+                Console.WriteLine($"  activityId: rootMissing={inventory.RootIdMissing}, rootWrong={inventory.RootIdWrong}, setsMissing={inventory.SetIdMissing}, setsWrong={inventory.SetIdWrong}, exercisesMissing={inventory.ExerciseIdMissing}, exercisesWrong={inventory.ExerciseIdWrong}");
+                Console.WriteLine($"  startTime: missing={inventory.StartTimeMissing}, invalidOrNull={inventory.StartTimeInvalid}");
                 Console.WriteLine("Do not synthesize missing activityId/startTime fields: investigate original Garmin request format.");
             }
             Console.WriteLine("NO PUT/POST, no restore, no Garmin writes. Update contract still requires validation.");
