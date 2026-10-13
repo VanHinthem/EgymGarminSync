@@ -113,6 +113,18 @@ internal static class HistoricalComparisonDiagnostic
                     recorded.Add(new(category, name, grams, true));
                 }
 
+                var setSources = workout.GetProperty("exercises").EnumerateArray()
+                    .Where(ex => ex.GetProperty("activity").GetProperty("activityId").GetInt64() != 31)
+                    .ToDictionary(ex => ex.GetProperty("activity").GetProperty("activityId").GetInt64(),
+                        ex => (IReadOnlyList<decimal>)ex.GetProperty("sets").EnumerateArray()
+                            .Select(set => set.GetProperty("weight").GetDecimal()).ToArray());
+                var setWeightReviews = SetWeightReviewMatcher.Compare(setSources, recorded);
+                var mappedReps = RepetitionMatcher.Compare(egymReps, garminReps);
+                var mappedCompleteness = StrengthSessionCompleteness.Check(egymCounts, garminCounts, Ids, 2);
+                var summary = TrainingReviewSummary.Build(mappedCompleteness, mappedReps, setWeightReviews, Ids);
+                Console.WriteLine($"  SUMMARY mappedSetsComplete={summary.ExpectedMappedSetsComplete} " +
+                    $"extraGarmin={summary.ExtraGarminRecords} repDifferences={summary.RepetitionDifferences?.ToString() ?? "unknown"} " +
+                    $"setWeightDifferences={summary.ExerciseWeightDifferences?.ToString() ?? "unknown"}");
                 if (egymWeightConflict)
                 {
                     Console.WriteLine($"{date} Garmin={match.GarminActivityId} EGYM weights vary between sets; per-set weights need review.");
