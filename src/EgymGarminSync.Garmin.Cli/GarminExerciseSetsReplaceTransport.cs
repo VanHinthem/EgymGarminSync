@@ -18,7 +18,8 @@ internal static class GarminExerciseSetsReplaceTransport
     /// <summary>
     /// Performs a single authenticated replacement request. Caller MUST separately validate
     /// source backup, fresh GET baseline, entire 36-set payload and user approval.
-    /// This method does not retry, restore, or claim post-write verification.
+    /// This method does not implement application-level retries, restoration or post-write verification.
+    /// The underlying Garmin client may retry after an authentication challenge.
     /// </summary>
     internal static async Task ReplaceAsync(GarminConnectContext context, long activityId,
         JsonElement validatedCompletePayload, CancellationToken cancellationToken = default)
