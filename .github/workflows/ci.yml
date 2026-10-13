@@ -19,5 +19,7 @@ jobs:
         run: dotnet build src/EgymGarminSync.Cli/EgymGarminSync.Cli.csproj --configuration Release
       - name: Build Garmin discovery prototype
         run: dotnet build src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj --configuration Release
+      - name: Execute read-only matching tests
+        run: dotnet test tests/EgymGarminSync.Matching.Tests/EgymGarminSync.Matching.Tests.csproj --configuration Release
       - name: Execute unit tests
         run: dotnet test tests/EgymGarminSync.Egym.Tests/EgymGarminSync.Egym.Tests.csproj --configuration Release
