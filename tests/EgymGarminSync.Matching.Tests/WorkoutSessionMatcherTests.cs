@@ -43,8 +43,8 @@ public sealed class WorkoutSessionMatcherTests
     {
         var match = Assert.Single(WorkoutSessionMatcher.Match(
             [new("egym-1", T0, EgymTrainingMethod.NegativeRepBased)],
-            [new(11, T0.AddMinutes(10), GarminTrainingVariant.Negative),
-             new(12, T0.AddMinutes(20), GarminTrainingVariant.Negative)]));
+            [new(11, T0.AddMinutes(-10), GarminTrainingVariant.Negative),
+             new(12, T0.AddMinutes(-20), GarminTrainingVariant.Negative)]));
         Assert.Equal(SessionMatchStatus.Ambiguous, match.Status);
         Assert.Null(match.GarminActivityId);
     }
@@ -55,7 +55,7 @@ public sealed class WorkoutSessionMatcherTests
         var matches = WorkoutSessionMatcher.Match(
             [new("egym-1", T0, EgymTrainingMethod.NegativeRepBased),
              new("egym-2", T0.AddMinutes(30), EgymTrainingMethod.NegativeRepBased)],
-            [new(11, T0.AddMinutes(15), GarminTrainingVariant.Negative)]);
+            [new(11, T0.AddMinutes(-15), GarminTrainingVariant.Negative)]);
         Assert.All(matches, match => Assert.Equal(SessionMatchStatus.Ambiguous, match.Status));
     }
 
