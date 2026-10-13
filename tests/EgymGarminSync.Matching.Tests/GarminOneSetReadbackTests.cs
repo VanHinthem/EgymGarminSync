@@ -6,7 +6,7 @@ namespace EgymGarminSync.Matching.Tests;
 
 public sealed class GarminOneSetReadbackTests
 {
-    private static string Snapshot()
+    internal static string Snapshot()
     {
         var categories = new[]
         {
@@ -33,7 +33,7 @@ public sealed class GarminOneSetReadbackTests
                     ["duration"] = 30
                 });
         for (var n = 0; n < 4; n++)
-            sets.Add(new JsonObject { ["setType"] = "REST", ["duration"] = 30 });
+            sets.Add(new JsonObject { ["setType"] = "REST", ["duration"] = 30, ["startTime"] = "2026-08-31T05:34:53Z" });
         return new JsonObject { ["activityId"] = 24180037460L, ["exerciseSets"] = sets }.ToJsonString();
     }
 
