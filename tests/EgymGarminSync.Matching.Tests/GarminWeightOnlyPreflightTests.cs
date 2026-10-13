@@ -86,10 +86,10 @@ public sealed class GarminWeightOnlyPreflightTests
     }
 
     [Fact]
-    public void RejectsUnexpectedTargetWeight()
+    public void RejectsMissingOriginalWeight()
     {
         var node = JsonNode.Parse(Fixture())!;
-        node["exerciseSets"]![0]!["weight"] = 22222;
+        node["exerciseSets"]![0]!["weight"] = null;
         Assert.Throws<InvalidOperationException>(() => GarminWeightOnlyPreflight.Build(node.ToJsonString(), Targets()));
     }
 }
