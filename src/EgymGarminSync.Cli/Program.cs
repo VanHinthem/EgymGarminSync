@@ -13,8 +13,10 @@ try
 {
     using var client = new EgymClient(baseUrl, email, password);
     var today = DateOnly.FromDateTime(DateTime.Today);
+    var matchingTimes = args.Contains("--matching-times", StringComparer.OrdinalIgnoreCase);
     var days = 180;
-    if (args.Length > 0 && (!int.TryParse(args[0], out days) || days is < 1 or > 730))
+    var daysArg = args.FirstOrDefault(arg => !arg.StartsWith("--", StringComparison.Ordinal));
+    if (daysArg is not null && (!int.TryParse(daysArg, out days) || days is < 1 or > 730))
     {
         Console.Error.WriteLine("Optional argument: number of days to look back (1-730).");
         return 1;
@@ -33,7 +35,9 @@ try
            obj.TryGetProperty(name, out var value) && value.ValueKind != System.Text.Json.JsonValueKind.Null
             ? value.ToString() : "—";
 
-    foreach (var workout in sorted.Take(12))
+    if (matchingTimes)
+        Console.WriteLine("EGYM workout completion timestamps (raw response, NOT assumed UTC):");
+    foreach (var workout in matchingTimes ? sorted : sorted.Take(12))
     {
         var exercises = workout.TryGetProperty("exercises", out var entries) &&
                         entries.ValueKind == System.Text.Json.JsonValueKind.Array
@@ -46,8 +50,11 @@ try
             .Select(set => Value(set, "trainingMethod"))
             .Where(method => method != "—" && method.Length > 0)
             .Distinct().ToArray();
-        Console.WriteLine($"{Value(workout, "completedAt")}: {exercises.Length} exercises; methods={string.Join(", ", methods)}");
+        Console.WriteLine($"{Value(workout, "completedAt")}: {exercises.Length} exercises; methods={string.Join(", ", methods)}" +
+            (matchingTimes ? $"; timezone={Value(workout, "timezone")}" : ""));
     }
+
+    if (matchingTimes) return 0;
 
     if (sorted.Length > 0 && sorted[0].TryGetProperty("exercises", out var latestExercises) &&
         latestExercises.ValueKind == System.Text.Json.JsonValueKind.Array)
