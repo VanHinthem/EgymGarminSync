@@ -36,6 +36,21 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--snapshot-test-activity", StringComparer.OrdinalIgnoreCase))
+    {
+        var index = Array.FindIndex(args, a => a.Equals("--snapshot-test-activity", StringComparison.OrdinalIgnoreCase));
+        if (args.Length != 2 || index != 0 ||
+            !long.TryParse(args[1], out var testId) || testId <= 0 ||
+            testId is 24180037460 or 23883291887)
+        {
+            Console.Error.WriteLine("Usage: --snapshot-test-activity <positive disposable Garmin activity ID>; known historical examples are forbidden.");
+            return 1;
+        }
+        // User must choose a disposable test activity. This command only issues GET requests.
+        var result = await GarminActivitySnapshot.RunAsync(context, testId);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--backup-aug31", StringComparer.OrdinalIgnoreCase))
     {
         var result = await GarminActivitySnapshot.RunAsync(context);
