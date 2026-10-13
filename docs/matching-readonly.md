@@ -270,3 +270,9 @@ Of the 27 **matched** sessions inspected:
 - All findings are strictly **observations**. Neither resistance semantics nor any Garmin correction is authorized. No writes occurred.
 
 Next: print detailed per-exercise set counts/repetition data for the two incomplete sessions, and preserve **individual EGYM set weights** for July 8 rather than discarding the entire session. Then improve a bounded review report before considering write design.
+
+## Exception diagnostics — pending CI and Windows validation
+
+The historical comparison now prints detailed **raw per-set** EGYM and Garmin strength data for (a) EGYM exercises with different weights between sets, (b) incomplete circuit reports, and (c) any Garmin ACTIVE strength set with zero repetitions. The output includes structural issue side, mapped exercise ID, expected/actual set count and reason; for each EGYM set it shows its position, reps and weight; and for each Garmin ACTIVE strength record its raw index, exercise identity, reps and unconverted raw weight (grams as observed in earlier tests).
+
+This is a diagnostic **not** an assumption that physical set order matches across systems, nor a solution yet for differing set weights. Expected examples are Jul 8 (variable EGYM weights), Jun 15 and May 4 (incomplete circuits), and Aug 5 and Jun 8 (zero Garmin reps). Run `--history-compare 27` after CI succeeds and inspect these anomalies before implementing per-set reconciliation. No writes.
