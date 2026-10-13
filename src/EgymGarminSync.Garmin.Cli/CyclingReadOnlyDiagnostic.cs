@@ -74,6 +74,36 @@ internal static class CyclingReadOnlyDiagnostic
                 string.Join(", ", set.EnumerateObject().Where(p => p.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
                     .Select(p => p.Name)));
         }
+        Console.WriteLine("Garmin activity-level summary (GET only, full training rather than bike-specific):");
+        try
+        {
+            var activity = await context.GetAndDeserialize<JsonElement>(
+                "/activity-service/activity/24180037460");
+            var fields = new[] { "duration", "durationInSeconds", "distance", "distanceInMeters",
+                "averageSpeed", "avgSpeed", "maxSpeed", "calories", "kilocalories",
+                "startTimeGMT", "startTimeLocal", "activityId", "activityName" };
+            if (activity.ValueKind == JsonValueKind.Object)
+            {
+                PrintFields(activity, fields);
+                foreach (var nested in new[] { "summaryDTO", "activitySummary", "summary" })
+                    if (activity.TryGetProperty(nested, out var value) && value.ValueKind == JsonValueKind.Object)
+                    {
+                        Console.WriteLine($"  {nested} selected fields:");
+                        PrintFields(value, fields);
+                    }
+                Console.WriteLine("  candidate field names: " +
+                    string.Join(", ", activity.EnumerateObject()
+                        .Where(p => p.Name.Contains("distance", StringComparison.OrdinalIgnoreCase) ||
+                                    p.Name.Contains("calor", StringComparison.OrdinalIgnoreCase) ||
+                                    p.Name.Contains("speed", StringComparison.OrdinalIgnoreCase))
+                        .Select(p => p.Name).Take(25)));
+            }
+            else Console.WriteLine("  Unrecognized activity response shape.");
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or HttpRequestException)
+        {
+            Console.WriteLine($"  Garmin activity summary not available ({ex.GetType().Name}); no conclusion inferred.");
+        }
         Console.WriteLine($"  Garmin bike records={matched}");
         Console.WriteLine("Values are raw, with units unverified. No automatic segment pairing or writes.");
         return bikes.Length == 2 && matched == 2 ? 0 : 1;
