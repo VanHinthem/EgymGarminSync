@@ -341,3 +341,21 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 ```
 
 Neither the availability nor the **units/semantics** of EGYM cycling values are confirmed merely because fields exist in its schema. Likewise Garmin strength activity `exerciseSets` might not support writing additional cardio metrics. Interpret the live sample before designing segment matching, deciding whether to enrich existing bike sets, or considering another activity representation. No write operations and no changes to strength matching.
+
+## EGYM cycling vs Garmin bike records — live 2026-08-31
+
+User successfully ran `--cycling-aug31` using the GET-only diagnostic. The EGYM workout contains two `activityId=31` Bike Ergometer exercise entries, and Garmin activity `24180037460` has two `INDOOR_BIKE` ACTIVE set records.
+
+**EGYM API entry order differs from chronological order**:
+- EGYM bike entry #1, `completedAt=2026-08-31T08:18:57.454` local Europe/Amsterdam (06:18:57 UTC), 5 time-based sets. Durations `7,5,4,1,1485`, sum **1502** raw units (likely seconds); distances `30,30,30,10,11010`, sum **11110** raw units (likely meters); `kiloCalories=178.85613001250064`.
+- EGYM bike entry #2, `completedAt=2026-08-31T07:34:53.591` Amsterdam local (05:34:53 UTC), 3 time-based sets. Durations `7,3,523`, sum **533**; distances `40,20,3810`, sum **3870**; `kiloCalories=61.125221768749995`.
+- All observed set-level `heartRate=0`, and `hrmData` empty. Set `speed` values ~6.25–7.55, **units unknown**, not yet compatible with distance/duration arithmetic without conversion.
+- EGYM `summary` exposes names `totalDuration,totalDistance,verticalDistance,avgPace,avgHeartRate,maxHeartRate,avgSpeed,avgIncline`, but values were not printed, so source-level summary reconciliation is pending.
+
+**Garmin workout activity**:
+- Bike record index 0, `startTime=2026-08-31T05:34:53.0` UTC, `duration=537.995` seconds (~8:58).
+- Bike record index 34, `startTime=2026-08-31T06:18:56.0` UTC, `duration=1500.0` seconds (25:00).
+- Garmin's bike exercise-set objects expose `duration`, timestamps and other strength-related optional scalar field names but **no observed distance, speed or calories values** in the sampled raw exercise-set records.
+- Timestamp/elapsed comparisons strongly support chronological correspondence EGYM entry #2 ↔ Garmin index 0 (~533 vs 537.995 sec) and EGYM entry #1 ↔ Garmin index 34 (~1502 vs 1500 sec). Do **not** pair by EGYM API array position.
+
+**Interpretation:** EGYM supplies potentially useful cycling duration, distance and calorie fields. This does not establish an endpoint/schema for injecting these metrics into an existing Garmin strength activity, nor that Garmin Connect will display them. Preserve the no-write policy. Next read-only slice: print bounded `summary` scalars and clarify distance/speed units; inspect Garmin activity-level summary if useful, with no writes.
