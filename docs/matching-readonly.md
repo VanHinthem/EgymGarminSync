@@ -73,3 +73,11 @@ No data was changed in either system.
 - If two Garmin activities are in the window (or two EGYM sessions share a Garmin candidate), the result stays `Ambiguous` even when one of their names appears compatible.
 - Tests include the real June 24 timestamps and incompatible variants, using fixture values rather than live credentials.
 - Incomplete session detection still requires exercise/set completeness inspection after candidate association. A time-only match does not imply a complete workout.
+
+## Read-only circuit completeness validation
+
+The independent `StrengthSessionCompleteness.Check` checks a caller-specified set of EGYM machine IDs and expected set count per machine. The verified full-circuit sample contains eight mapped strength machines with two sets each. REST and INDOOR_BIKE records are excluded via the explicit `IsActiveStrength` flag.
+
+The checker reports missing/duplicate EGYM exercises, missing/extra Garmin strength sets, unmapped IDs, and unexpected exercises. It does not modify workouts or claim that all sessions are complete. Ingestion must still derive `IsActiveStrength` reliably from Garmin's recorded set type and exercise category.
+
+**Important:** These are structural checks only. Same set count does not prove exact set-to-set correspondence, equal reps, or valid resistance units. Incomplete and conflicting sessions must never authorize an automatic write.
