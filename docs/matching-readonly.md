@@ -213,3 +213,19 @@ User executed `--history-match` on Windows. EGYM returned **28/28 normalized ses
 - The observed elapsed Garmin-start-to-EGYM-completion intervals range approximately 42–49 minutes in these 28 sessions. This is an elapsed event difference, not a clock offset.
 
 These are **session candidate** results, not per-activity exercise/rep/weight validations. The extra Garmin EGYM activity cannot be classified as an unmatched workout without comparing the different query scopes. The 24 June conflict must remain review-only, not an automatic method correction. No writes occurred.
+
+## Historical exercise-set comparison (new, pending live validation)
+
+The integrated CLI now has a bounded GET-only historical comparison:
+
+```powershell
+# Inspect the five most recent matched sessions first
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --history-compare 5
+
+# Once the first run is verified, inspect up to 27 matched sessions
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --history-compare 27
+```
+
+The command fetches the 180-day EGYM history once, obtains the latest 100 Garmin activities, runs two-sided session matching, and fetches Garmin exercise-set records for up to the requested number of **Matched** activities only. Method conflicts, ambiguities and no-candidate sessions are printed but excluded from recorded-set comparisons. Each matched session prints structural completeness, separate repetition disagreement counts, weight comparison status and per-exercise differences. Invalid records fail closed; if EGYM weights vary between rounds, the current per-exercise weight aggregate is not produced.
+
+This version is read-only and does not change templates, activity exercise sets, cycling or rests. Weight differences remain provisional given unverified resistance semantics. A historical run may uncover incomplete sessions or different Garmin shapes not present in the original two samples; review output before broadening.
