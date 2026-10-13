@@ -29,6 +29,22 @@ public sealed class GarminExerciseSetsWriteContractTests
         GarminExerciseSetsWriteContract.Validate(ValidPayload(), Id);
 
     [Fact]
+    public void InventoryDistinguishesMissingFromWrongIds()
+    {
+        var root = JsonNode.Parse(ValidPayload())!;
+        root["exerciseSets"]![0]!.AsObject().Remove("activityId");
+        root["exerciseSets"]![1]!["activityId"] = 123L;
+        root["exerciseSets"]![2]!["exercises"]![0]!.AsObject().Remove("activityId");
+        root["exerciseSets"]![3]!.AsObject().Remove("startTime");
+        var status = GarminExerciseSetsWriteContract.Inspect(root.ToJsonString(), Id);
+        Assert.Equal(1, status.SetIdMissing);
+        Assert.Equal(1, status.SetIdWrong);
+        Assert.Equal(1, status.ExerciseIdMissing);
+        Assert.Equal(1, status.StartTimeMissing);
+        Assert.False(status.RootIdMissing);
+    }
+
+    [Fact]
     public void RejectsMissingNestedActivityId()
     {
         var root = JsonNode.Parse(ValidPayload())!;
