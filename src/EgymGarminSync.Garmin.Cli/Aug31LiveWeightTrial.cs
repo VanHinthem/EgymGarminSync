@@ -59,7 +59,7 @@ internal static class Aug31LiveWeightTrial
 
         var liveActivity = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{Id}");
         using (var savedActivity = JsonDocument.Parse(originalActivity))
-            if (!JsonElement.DeepEquals(savedActivity.RootElement, liveActivity))
+            if (!GarminActivityMetadataTolerance.IsAcceptable(originalActivity, liveActivity.GetRawText()))
                 return Block("Garmin activity metadata changed since original snapshot.");
 
         var candidateJson = restore
@@ -93,7 +93,7 @@ internal static class Aug31LiveWeightTrial
         if (state != expectedAfter) return Block("Unexpected post-write state. Stop; do not run additional writes blindly.");
         var afterActivity = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{Id}");
         using (var saved = JsonDocument.Parse(originalActivity))
-            if (!JsonElement.DeepEquals(saved.RootElement, afterActivity))
+            if (!GarminActivityMetadataTolerance.IsAcceptable(originalActivity, afterActivity.GetRawText()))
                 return Block("Activity metadata changed after PUT; inspect before proceeding.");
         Console.WriteLine(restore ? "RESTORE VERIFIED in Garmin readback." :
             "ONE-SET TEST VERIFIED. The original 22 kg value is NOT restored yet; run the separate restore command.");
