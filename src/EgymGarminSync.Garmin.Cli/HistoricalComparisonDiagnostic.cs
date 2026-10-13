@@ -116,10 +116,17 @@ internal static class HistoricalComparisonDiagnostic
                 if (egymWeightConflict)
                 {
                     Console.WriteLine($"{date} Garmin={match.GarminActivityId} EGYM weights vary between sets; requires per-set review.");
+                    PrintSetDetails(workout, raw);
                     continue;
                 }
                 var report = ReadOnlyComparisonReport.Build(match, egymCounts, garminCounts,
                     egymWeights, recorded, Ids, egymReps: egymReps, garminReps: garminReps);
+                if (report.Completeness is { IsComplete: false } incomplete)
+                {
+                    foreach (var issue in incomplete.Issues)
+                        Console.WriteLine($"  COMPLETENESS {issue.Side} exercise={issue.EgymActivityId?.ToString() ?? "unknown"} actual={issue.ActualSets} expected={issue.ExpectedSets} reason={issue.Reason}");
+                    PrintSetDetails(workout, raw);
+                }
                 var repChanges = report.Repetitions.Count(r => r.Status == RepetitionStatus.Different);
                 var weightChanges = report.Differences.Count(d => d.Status == MatchStatus.Different);
                 Console.WriteLine($"{date} Garmin={match.GarminActivityId} complete={report.Completeness?.IsComplete} " +
@@ -139,6 +146,33 @@ internal static class HistoricalComparisonDiagnostic
         Console.WriteLine($"Inspected={visited}; structural errors={failures}; no data written.");
         return failures == 0 ? 0 : 1;
     }
+
+    private static void PrintSetDetails(JsonElement workout, JsonElement garmin)
+    {
+        Console.WriteLine("  SET DETAILS (read-only, physical order; no cross-system set pairing):");
+        foreach (var exercise in workout.GetProperty("exercises").EnumerateArray())
+        {
+            var id = exercise.GetProperty("activity").GetProperty("activityId").GetInt64();
+            if (id == 31) continue;
+            var sets = exercise.GetProperty("sets").EnumerateArray().ToArray();
+            Console.WriteLine($"  EGYM exercise={id} sets={sets.Length} " +
+                string.Join("; ", sets.Select((set, i) => $"#{i + 1} reps={RawNumber(set, "numberOfReps")} weight={RawNumber(set, "weight")}")));
+        }
+        foreach (var (set, index) in garmin.GetProperty("exerciseSets").EnumerateArray().Select((set, index) => (set, index)))
+        {
+            if (set.GetProperty("setType").GetString() != "ACTIVE") continue;
+            var exercises = set.GetProperty("exercises").EnumerateArray().ToArray();
+            if (exercises.Length == 0) { Console.WriteLine($"  Garmin record={index} ACTIVE has no identity"); continue; }
+            var first = exercises[0];
+            var category = Required(first, "category");
+            if (category == "INDOOR_BIKE") continue;
+            var name = first.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+            Console.WriteLine($"  Garmin record={index} {category}/{name ?? "(none)"} reps={RawNumber(set, "repetitionCount")} weightRaw={RawNumber(set, "weight")}");
+        }
+    }
+
+    private static string RawNumber(JsonElement item, string field) =>
+        item.TryGetProperty(field, out var value) ? value.ToString() : "(missing)";
 
     private static string Required(JsonElement value, string field) =>
         value.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())
