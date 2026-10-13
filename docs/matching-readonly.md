@@ -289,3 +289,11 @@ The user ran `--history-compare 27` after adding per-set exception logging; 27 m
 - The extra UNKNOWN Garmin record might be a non-strength placeholder or a genuine unexpected strength item. We cannot infer its semantics from the displayed fields. Keep it explicit and do not delete/ignore it automatically. Some other records show a genuine zero within a mapped expected exercise: handle those separately.
 
 **Next slice recommended:** distinguish expected machine set coverage from unexpected additional active records, show reps for confidently mapped sets even when extras exist, and store/compare weights for each source set without assuming Garmin/EGYM set order is correlated. All operations stay read-only.
+
+## Read-only mapped-set exception handling (pending CI / live validation)
+
+This slice separates `CompletenessReport.IsComplete` (strict: any unexpected Garmin ACTIVE record is still an issue) from the ability to review all **expected** exercise identities and their repetition and weight values. An extra Garmin `UNKNOWN` record stays visible as `UnexpectedExercise`, but if no expected set is missing or duplicated, the mapped-exercise comparisons may proceed. In particular, May 4 should show BENCH_PRESS 15/15 EGYM vs 20/15 Garmin, and June 15 should show the extra unknown without reporting missing expected strength sets. Unit tests cover the extra-UNKNOWN case.
+
+For Jul 8 variable EGYM resistance, a separate read-only `SetWeightReviewMatcher` compares each machine's actual two EGYM weights to the two Garmin recorded weights as **unordered multisets**, without claiming cross-system set order identity. Missing Garmin sets or different values are not equal; varied weights are never collapsed to an average or a single arbitrary value. The historical diagnostic prints `SET-WEIGHT` differences and independent mapped-set repetition comparisons even when the existing per-exercise aggregate cannot be built. Three new tests cover reverse order, July 8 variable weights and a missing set.
+
+No Garmin write endpoint, token handling, or workout template data is changed. Verify CI then rerun the full historical diagnostic to confirm both May 4 and July 8 output.
