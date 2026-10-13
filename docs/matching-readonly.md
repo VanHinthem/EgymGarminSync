@@ -394,3 +394,16 @@ The Garmin `exerciseSets` bike records have duration but no apparent per-segment
 User-approved **design scope only**: consider adding **EGYM stationary-bike distance** to a matching existing Garmin strength activity. Do **not** sync cycling speed, calories or heart rate; do not modify Garmin's existing durations, strength sets or HR data. On 2026-08-31 the two EGYM bike blocks total **14,980 m** (3,870 + 11,110 m), while the Garmin full-activity summary reports `distance=0`. Proposed read-only preview: `distance: 0 m -> 14,980 m`, explicitly marked **not write-ready**.
 
 Critical unresolved detail: if Garmin calculates average speed from full strength-activity duration (~4,236 s / 70m36s), 14.98 km would imply ~12.7 km/h rather than the bike-only 33m55s average (~26.5 km/h). We must determine which Garmin fields are genuinely supported/editable for this activity type and whether speed is recomputed, before considering changes. Treat whole-activity distance as a different concept from two bike-segment distances. No write method, backup, or user-authorized activity mutation exists yet. This decision is not authorization to modify Garmin data.
+
+## Garmin distance edit feasibility — external documentation review, 2026-10-13
+
+Garmin's official guide "How Do I Edit an Activity in Garmin Connect?" documents activity edits in Garmin Connect Web and App, but does **not** guarantee that total distance is editable for a recorded Strength Training activity. It explicitly notes Connect edits do **not** alter an exported original activity file. Source: https://support.garmin.com/en-GB/?faq=aNGg6LTaoT4X7fyCnIuQW6&productID=73207&tab=topics&topicTag=region_activities
+
+Garmin's official activity-trimming guidance explicitly lists **Strength Training** among activity types unsupported for trimming. Trimming is not the same as editing a total-distance summary, so this is a limitation signal rather than proof that total-distance editing is unavailable. Source: https://support.garmin.com/en-US/?faq=y6fK2dqAd34u9R5x54cxH8
+
+Implications for issue #3:
+- Keep proposed bike-distance change `0 -> 14980 meters` as a **blocked review-only candidate**, not an executable change.
+- Do not infer Garmin averageSpeed will recompute from bike-only duration: this is a whole Strength Training activity spanning 4236 seconds, while bike-only EGYM duration is 2035 seconds.
+- Do not use arbitrary Garmin `summaryDTO.distance` edits or FIT replacement/duplicate activities without verifying update support, backup/restore, consistency of Garmin UI and exports, and explicit user authorization.
+- Scope remains distance only. Never change heart rate, calories, time or exercise sets for this feature.
+- Next possible non-destructive check: inspect the actual Garmin Connect Web **Edit Activity** UI for activity `24180037460` to see whether distance is offered; looking without pressing Save does not modify the activity. If absent, keep blocked and consider a separate informational preview instead.
