@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../EgymGarminSync.Matching/EgymGarminSync.Matching.csproj" />
+    <ProjectReference Include="../EgymGarminSync.Egym/EgymGarminSync.Egym.csproj" />
   </ItemGroup>
 </Project>
