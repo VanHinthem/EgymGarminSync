@@ -46,7 +46,17 @@ try
             Console.Error.WriteLine("Usage: --snapshot-test-activity <positive disposable Garmin activity ID>; known historical examples are forbidden.");
             return 1;
         }
-        // User must choose a disposable test activity. This command only issues GET requests.
+        // Fail closed unless this ID is visible in the recent activity list and is not EGYM.
+        // Naming alone cannot prove disposability: the user must have created it expressly for this trial.
+        var recentActivities = await client.GetActivities(0, 100);
+        var selected = recentActivities.SingleOrDefault(a => a.ActivityId == testId);
+        if (selected is null ||
+            selected.ActivityName.Contains("EGYM", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Test activity not found among recent activities or is labeled EGYM; no snapshot made.");
+            return 1;
+        }
+        Console.WriteLine("GET-only snapshot. Ensure this is a deliberately created disposable test activity.");
         var result = await GarminActivitySnapshot.RunAsync(context, testId);
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
