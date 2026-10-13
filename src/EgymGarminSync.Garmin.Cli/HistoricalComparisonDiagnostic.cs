@@ -122,7 +122,7 @@ internal static class HistoricalComparisonDiagnostic
                 var mappedReps = RepetitionMatcher.Compare(egymReps, garminReps);
                 var mappedCompleteness = StrengthSessionCompleteness.Check(egymCounts, garminCounts, Ids, 2);
                 var summary = TrainingReviewSummary.Build(mappedCompleteness, mappedReps, setWeightReviews, Ids);
-                Console.WriteLine($"  SUMMARY mappedSetsComplete={summary.ExpectedMappedSetsComplete} " +
+                Console.WriteLine($"{date} Garmin={match.GarminActivityId} SUMMARY mappedSetsComplete={summary.ExpectedMappedSetsComplete} " +
                     $"extraGarmin={summary.ExtraGarminRecords} repDifferences={summary.RepetitionDifferences?.ToString() ?? "unknown"} " +
                     $"setWeightDifferences={summary.ExerciseWeightDifferences?.ToString() ?? "unknown"}");
                 if (egymWeightConflict)
