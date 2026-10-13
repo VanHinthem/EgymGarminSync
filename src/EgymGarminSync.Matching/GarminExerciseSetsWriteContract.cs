@@ -40,8 +40,54 @@ public static class GarminExerciseSetsWriteContract
         }
     }
 
+    /// <summary>Schema inventory only: never prints personal exercise record contents.</summary>
+    public static GarminSetSchemaInventory Inspect(string json, long activityId)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var sets = root.GetProperty("exerciseSets");
+        if (sets.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("exerciseSets is not an array.");
+        int setMissing = 0, setWrong = 0, exerciseMissing = 0, exerciseWrong = 0;
+        int timeMissing = 0, timeInvalid = 0, active = 0, rest = 0, nested = 0;
+        foreach (var set in sets.EnumerateArray())
+        {
+            CountId(set, activityId, ref setMissing, ref setWrong);
+            if (set.TryGetProperty("setType", out var type) && type.ValueKind == JsonValueKind.String)
+            {
+                if (type.GetString() == "ACTIVE") active++;
+                if (type.GetString() == "REST") rest++;
+            }
+            if (!set.TryGetProperty("startTime", out var time)) timeMissing++;
+            else if (time.ValueKind != JsonValueKind.String ||
+                     !DateTimeOffset.TryParse(time.GetString(), out _)) timeInvalid++;
+            if (!set.TryGetProperty("exercises", out var exercises) ||
+                exercises.ValueKind != JsonValueKind.Array) continue;
+            foreach (var exercise in exercises.EnumerateArray())
+            {
+                nested++;
+                CountId(exercise, activityId, ref exerciseMissing, ref exerciseWrong);
+            }
+        }
+        var rootMissing = !root.TryGetProperty("activityId", out _);
+        return new(rootMissing, !rootMissing && !HasActivityId(root, activityId),
+            sets.GetArrayLength(), active, rest, nested, setMissing, setWrong,
+            exerciseMissing, exerciseWrong, timeMissing, timeInvalid);
+    }
+
+    private static void CountId(JsonElement item, long activityId, ref int missing, ref int wrong)
+    {
+        if (!item.TryGetProperty("activityId", out _)) missing++;
+        else if (!HasActivityId(item, activityId)) wrong++;
+    }
+
     private static bool HasActivityId(JsonElement item, long activityId) =>
         item.TryGetProperty("activityId", out var id) &&
         id.ValueKind == JsonValueKind.Number && id.TryGetInt64(out var number) &&
         number == activityId;
 }
+
+public sealed record GarminSetSchemaInventory(
+    bool RootIdMissing, bool RootIdWrong, int SetCount, int ActiveCount, int RestCount,
+    int NestedExerciseCount, int SetIdMissing, int SetIdWrong,
+    int ExerciseIdMissing, int ExerciseIdWrong, int StartTimeMissing, int StartTimeInvalid);
