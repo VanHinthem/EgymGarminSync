@@ -78,14 +78,14 @@ Set: `setType`, `numberOfReps`, `weight`, `duration`, `distance`, `heartRate`, `
 - Exercise/set correspondence between Garmin and EGYM, especially when equipment order changes.
 - What `workoutPlanName`, `workoutPlanGroupType` and `templateGroupId` contain on actual data.
 - Whether the number of EGYM circuit rounds and the Garmin set count always agree for incomplete sessions.
-- Which workout method maps to which of the **two Garmin user-created templates**; verify from Garmin.
+- **Resolved 2026-10-13:** `REGULAR_REPBASED` corresponds to Garmin `EGYM Positief` (template `1464321438`), and `NEGATIVE_REPBASED` corresponds to `EGYM Negatief` (template `1464319904`), based on confirmed Garmin template names and strength set rep schemes. Cross-system exercise identity mapping remains a candidate pending broader validation.
 - Whether the strength-measurement endpoint adds information relevant for sync beyond workouts.
 - Feasibility and details of updating Garmin recorded activity sets and workout templates; both APIs are unofficial.
 
 ## Next work
 
-1. Keep issue #1 open until build/test validation and acceptance criteria are evaluated; the current client has no automated tests yet.
-2. For issue #2, retrieve Garmin workouts and registered strength activity/sets **read-only**.
+1. Issue #1 implementation and CI tests were merged to `main` in PR #7. Outstanding research into negative resistance semantics and strength measurements remains.
+2. Issue #2 is merged to `main` in PR #8. Both Garmin templates and registered strength activity sets were retrieved and verified read-only.
 3. Design exercise mapping by EGYM `activityId` and Garmin exercise identity; never match by variable equipment order.
 4. Before writes, agree the interpretation of eccentric weight and show all decisions in a user-approved preview.
 5. Keep warm-up and finishing cycling untouched, and preserve complete Garmin records on any eventual replace-all updates.
