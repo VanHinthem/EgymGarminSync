@@ -359,3 +359,7 @@ User successfully ran `--cycling-aug31` using the GET-only diagnostic. The EGYM 
 - Timestamp/elapsed comparisons strongly support chronological correspondence EGYM entry #2 ↔ Garmin index 0 (~533 vs 537.995 sec) and EGYM entry #1 ↔ Garmin index 34 (~1502 vs 1500 sec). Do **not** pair by EGYM API array position.
 
 **Interpretation:** EGYM supplies potentially useful cycling duration, distance and calorie fields. This does not establish an endpoint/schema for injecting these metrics into an existing Garmin strength activity, nor that Garmin Connect will display them. Preserve the no-write policy. Next read-only slice: print bounded `summary` scalars and clarify distance/speed units; inspect Garmin activity-level summary if useful, with no writes.
+
+## Cycling summary reconciliation diagnostic (pending CI/live validation)
+
+The existing GET-only `--cycling-aug31` command now prints raw scalar values within EGYM bike `summary` (including `totalDuration`, `totalDistance`, `avgSpeed`, `avgPace`, heart-rate and incline values when present) and calculates independent raw sums of the nested set `duration` and `distance` values. Missing or nonnumeric set values are explicitly reported as unavailable instead of silently counted as zero. Values remain in source units: no unsupported speed or distance conversions. Compare summary fields with set sums and the already-observed Garmin bike set durations before researching Garmin activity-level enrichment. No writes.
