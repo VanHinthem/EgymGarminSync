@@ -39,8 +39,16 @@ internal static class CyclingReadOnlyDiagnostic
         {
             Console.WriteLine($"  EGYM bike segment {index + 1}:");
             PrintFields(bike, ["completedAt", "kiloCalories", "summary", "hrmData"]);
+            if (bike.TryGetProperty("summary", out var summary) && summary.ValueKind == JsonValueKind.Object)
+            {
+                Console.WriteLine("    EGYM summary values (raw; units not assumed):");
+                PrintFields(summary, ["totalDuration", "totalDistance", "verticalDistance",
+                    "avgPace", "avgHeartRate", "maxHeartRate", "avgSpeed", "avgIncline"]);
+            }
             var sets = bike.GetProperty("sets").EnumerateArray().ToArray();
             Console.WriteLine($"    sets={sets.Length}");
+            PrintRawSum(sets, "duration");
+            PrintRawSum(sets, "distance");
             foreach (var (set, setIndex) in sets.Select((x, i) => (x, i)))
             {
                 Console.Write($"    set {setIndex + 1}: ");
@@ -69,6 +77,18 @@ internal static class CyclingReadOnlyDiagnostic
         Console.WriteLine($"  Garmin bike records={matched}");
         Console.WriteLine("Values are raw, with units unverified. No automatic segment pairing or writes.");
         return bikes.Length == 2 && matched == 2 ? 0 : 1;
+    }
+
+    private static void PrintRawSum(JsonElement[] sets, string field)
+    {
+        var values = sets.Select(s => s.TryGetProperty(field, out var v) &&
+            v.ValueKind == JsonValueKind.Number ? (decimal?)v.GetDecimal() : null).ToArray();
+        if (values.Any(v => v is null))
+        {
+            Console.WriteLine($"    sum({field})=unavailable (missing/non-numeric set value)");
+            return;
+        }
+        Console.WriteLine($"    sum({field})={values.Sum(v => v!.Value).ToString(CultureInfo.InvariantCulture)} (raw units)");
     }
 
     private static void PrintFields(JsonElement source, string[] fields)
