@@ -90,6 +90,16 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Length == 1 && args[0].Equals("--refresh-preview-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        // Two-phase GET-only workflow. Fail without preview when a fresh snapshot fails.
+        var backupResult = await GarminActivitySnapshot.RunAsync(context);
+        if (backupResult != 0) return backupResult;
+        Console.WriteLine("Fresh snapshot captured. Checking local weight-only proposal...");
+        var previewResult = await OfflineSnapshotPreflight.RunAsync();
+        if (previewResult == 0) tokenCache.ClearLoginCooldown();
+        return previewResult;
+    }
     if (args.Contains("--backup-aug31", StringComparer.OrdinalIgnoreCase))
     {
         var result = await GarminActivitySnapshot.RunAsync(context);
