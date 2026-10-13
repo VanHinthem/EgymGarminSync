@@ -247,3 +247,26 @@ Additional **2026-08-05** anomaly: Seated Row (334) EGYM 40 kg vs Garmin 27 kg (
 The 2026-06-24 method conflict was correctly printed and omitted from all exercise comparisons. No Garmin or EGYM writes were performed.
 
 Next validation should run `--history-compare 27` after CI review; watch for per-set variable weights, incomplete records and API errors before contemplating synchronization.
+
+## Full historical exercise comparison — live 2026-10-13
+
+The user ran `--history-compare 27`. Summary: `EGYM=28`, `Garmin=29` in their respective query scopes, `matched=27`, `conflicts=1`; `Inspected=27`, `structural errors=0`, `no data written`.
+
+Of the 27 **matched** sessions inspected:
+- **24** reported `complete=True` and `weightReviewable=True`.
+- **2** reported `complete=False`, `weightReviewable=False`: **2026-06-15** (Garmin `23259077933`) and **2026-05-04** (Garmin `22762471069`). The current CLI does not print the underlying completeness issues; investigate before interpreting these as missing workouts or assuming what is absent.
+- **1** session, **2026-07-08** (Garmin `23519342631`), reported *EGYM weights vary between sets; requires per-set review*. Its current historical comparison skips the overall weight/repetition report rather than aggregating conflicting source weights.
+- Across the **24 fully compared sessions**, there were **111 exercise-level weight differences**, and **6 exercise-level repetition mismatches across 5 sessions**. A differing exercise-level repetition result may involve one set (not necessarily both).
+- Repetition mismatches:
+  - Aug 19, Leg Curl `332`: EGYM `[15,15]` vs Garmin `[15,16]`
+  - Aug 7, Seated Row `334` and Leg Curl `332`: each EGYM `[20,19]` vs Garmin `[20,20]`
+  - Aug 5, Leg Press `581`: EGYM `[20,20]` vs Garmin `[0,20]`
+  - Jul 1, Seated Row `334`: EGYM `[15,15]` vs Garmin `[15,16]`
+  - Jun 8, Abdominal Crunch `330`: EGYM `[20,20]` vs Garmin `[20,0]`
+- Two recorded Garmin **zero-rep sets** (Aug 5 and Jun 8) must be reviewed as set-level anomalies; they are not evidence the set is absent.
+- Six dates had **zero** weight differences in the full comparisons: Apr 20, Apr 29, May 6, May 8, May 11, and (check list) no: **May 4 is incomplete and therefore not comparable**. Actually, the recorded zero-difference complete dates are **Apr 20, Apr 29, May 6, May 8, May 11**. These are five sessions, not six.
+- The Garmin positive and negative recorded weights often remain identical across several consecutive activities while EGYM values change; this is suggestive of stale planned weights but not proof.
+- The June 24 `MethodConflict` remains excluded from exercise comparisons.
+- All findings are strictly **observations**. Neither resistance semantics nor any Garmin correction is authorized. No writes occurred.
+
+Next: print detailed per-exercise set counts/repetition data for the two incomplete sessions, and preserve **individual EGYM set weights** for July 8 rather than discarding the entire session. Then improve a bounded review report before considering write design.
