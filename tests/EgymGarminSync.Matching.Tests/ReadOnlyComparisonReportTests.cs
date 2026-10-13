@@ -87,4 +87,30 @@ public sealed class ReadOnlyComparisonReportTests
         Assert.Equal(8, report.Repetitions.Count);
     }
 
+    [Fact]
+    public void ExtraUnknownGarminRecordDoesNotHideMappedRepetitionMismatch()
+    {
+        var report = ReadOnlyComparisonReport.Build(
+            new("may04", 22762471069, SessionMatchStatus.Matched, TimeSpan.FromMinutes(45)),
+            Entries.Select(e => new EgymExerciseSetCount(e.Id, 2)).ToArray(),
+            Entries.Select(e => new GarminExerciseSetCount(e.Category, e.Name, 2, true))
+                .Append(new GarminExerciseSetCount("UNKNOWN", null, 1, true)).ToArray(),
+            Entries.Select(e => new EgymExerciseWeight(e.Id, e.Egym)).ToArray(),
+            Entries.SelectMany(e => Enumerable.Repeat(new GarminRecordedSet(e.Category, e.Name, e.Garmin * 1000m, true), 2))
+                .Append(new GarminRecordedSet("UNKNOWN", null, null, true)).ToArray(),
+            Ids,
+            egymReps: Entries.Select(e => new EgymExerciseReps(e.Id, [15, 15])).ToArray(),
+            garminReps: Entries.SelectMany(e => new[]
+            {
+                new GarminExerciseReps(e.Category, e.Name, e.Id == 333 ? 20 : 15, true),
+                new GarminExerciseReps(e.Category, e.Name, 15, true)
+            }).Append(new GarminExerciseReps("UNKNOWN", null, 0, true)).ToArray());
+        Assert.False(report.Completeness!.IsComplete);
+        Assert.Single(report.Completeness.Issues);
+        Assert.Equal("UnexpectedExercise", report.Completeness.Issues[0].Reason);
+        Assert.True(report.HasReviewableDifferences);
+        Assert.False(report.RepetitionsAllEqual);
+        Assert.Equal(RepetitionStatus.Different, report.Repetitions.Single(r => r.EgymActivityId == 333).Status);
+    }
+
 }
