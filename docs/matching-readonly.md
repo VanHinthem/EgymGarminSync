@@ -331,3 +331,13 @@ Verified exceptions:
 Output improvement: summary lines now prefix the local workout date and Garmin activity ID, so each row is unambiguous in long logs. This presentation change is pending CI verification.
 
 All weight semantics and safe Garmin write operations remain unverified and not authorized.
+
+## Cycling data discovery — new read-only diagnostic (pending CI and live test)
+
+The Garmin CLI has a focused `--cycling-aug31` command for 2026-08-31, Garmin activity `24180037460`. It retrieves one day's EGYM workout and Garmin recorded activity exercise sets with **GET requests only**. EGYM `activityId=31` exercise entries (observed two segments) are printed separately with the raw values of duration, distance, speed, heart rate, calories and other candidate scalar fields on each nested set. Garmin `INDOOR_BIKE` ACTIVE records (expected two) are inspected for corresponding recorded values and safely bounded scalar field names. Structured HRM/summary data is described by shape only; do not log raw sensor arrays, identity data or tokens.
+
+```powershell
+dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj -- --cycling-aug31
+```
+
+Neither the availability nor the **units/semantics** of EGYM cycling values are confirmed merely because fields exist in its schema. Likewise Garmin strength activity `exerciseSets` might not support writing additional cardio metrics. Interpret the live sample before designing segment matching, deciding whether to enrich existing bike sets, or considering another activity representation. No write operations and no changes to strength matching.
