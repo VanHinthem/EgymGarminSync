@@ -33,6 +33,22 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--history-compare", StringComparer.OrdinalIgnoreCase))
+    {
+        // Initially cap historical exercise-set GET requests. Optional second argument
+        // allows a small first validation run before inspecting all matched sessions.
+        var commandIndex = Array.FindIndex(args, arg => arg.Equals("--history-compare", StringComparison.OrdinalIgnoreCase));
+        var max = 5;
+        if (commandIndex + 1 < args.Length &&
+            (!int.TryParse(args[commandIndex + 1], out max) || max is < 1 or > 30))
+        {
+            Console.Error.WriteLine("Use --history-compare [1..30] to limit session inspections.");
+            return 1;
+        }
+        var result = await HistoricalComparisonDiagnostic.RunAsync(context, client, max);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--history-match", StringComparer.OrdinalIgnoreCase))
     {
         var result = await HistoricalMatchingDiagnostic.RunAsync(client, 180);
