@@ -407,3 +407,7 @@ Implications for issue #3:
 - Do not use arbitrary Garmin `summaryDTO.distance` edits or FIT replacement/duplicate activities without verifying update support, backup/restore, consistency of Garmin UI and exports, and explicit user authorization.
 - Scope remains distance only. Never change heart rate, calories, time or exercise sets for this feature.
 - Next possible non-destructive check: inspect the actual Garmin Connect Web **Edit Activity** UI for activity `24180037460` to see whether distance is offered; looking without pressing Save does not modify the activity. If absent, keep blocked and consider a separate informational preview instead.
+
+## Garmin Connect Web edit UI — user check 2026-10-13
+
+User opened editing controls for their 2026-08-31 Garmin strength activity and confirmed **no Distance field was visible**. This is a direct user UI observation, not proof that no undocumented backend mutation is possible. Do not assume whole-activity distance can be edited in the supported Garmin Connect UI, and do not implement an undocumented summaryDTO mutation. Keep EGYM bike distance (14,980 m) as informational, **not syncable**, in a future read-only preview. No separate cycling activities or changes to Garmin heart rate/calories. Strength-set correction design remains separately gated by backups, full diff and explicit authorization.
