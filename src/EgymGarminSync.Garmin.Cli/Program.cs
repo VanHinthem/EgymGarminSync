@@ -61,6 +61,18 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Length == 1 && args[0].Equals("--live-test-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31LiveWeightTrial.RunAsync(context, restore: false);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--live-restore-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31LiveWeightTrial.RunAsync(context, restore: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--trial-preflight-aug31", StringComparer.OrdinalIgnoreCase))
     {
         if (args.Length != 1)
