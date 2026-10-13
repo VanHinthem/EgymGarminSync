@@ -12,7 +12,9 @@ public static class ReadOnlyComparisonReport
         IReadOnlyCollection<EgymExerciseWeight> egymWeights,
         IReadOnlyCollection<GarminRecordedSet> garminWeights,
         IReadOnlyCollection<long> expectedMachineIds,
-        int expectedSetsPerMachine = 2)
+        int expectedSetsPerMachine = 2,
+        IReadOnlyCollection<EgymExerciseReps>? egymReps = null,
+        IReadOnlyCollection<GarminExerciseReps>? garminReps = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         // Do not compare weights across ambiguous or disputed sessions.
@@ -30,10 +32,18 @@ public static class ReadOnlyComparisonReport
             return new(session, completeness, [], false, "Missing or duplicate EGYM weight identities");
 
         var differences = StrengthWeightMatcher.Compare(egymWeights, garminWeights);
+        var repetitionComparisons = egymReps is not null && garminReps is not null
+            ? RepetitionMatcher.Compare(egymReps, garminReps, expectedSetsPerMachine)
+            : [];
+        var repetitionsComplete = egymReps is not null && garminReps is not null &&
+            repetitionComparisons.Count == expectedMachineIds.Count &&
+            expectedMachineIds.All(id => repetitionComparisons.Count(x => x.EgymActivityId == id) == 1) &&
+            repetitionComparisons.All(x => x.Status == RepetitionStatus.Equal);
         var reviewable = differences.All(x => x.Status is MatchStatus.Equal or MatchStatus.Different);
         return new(session, completeness, differences, reviewable,
             reviewable ? "Read-only comparison available; weights require unit/negative-method verification" :
-                "Unmapped, missing or ambiguous recorded weights");
+                "Unmapped, missing or ambiguous recorded weights")
+        { Repetitions = repetitionComparisons, RepetitionsAllEqual = repetitionsComplete };
     }
 }
 
@@ -42,4 +52,8 @@ public sealed record ComparisonReport(
     CompletenessReport? Completeness,
     IReadOnlyList<WeightDifference> Differences,
     bool HasReviewableDifferences,
-    string Reason);
+    string Reason)
+{
+    public IReadOnlyList<RepetitionComparison> Repetitions { get; init; } = [];
+    public bool RepetitionsAllEqual { get; init; }
+}
