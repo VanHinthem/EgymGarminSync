@@ -411,3 +411,13 @@ Implications for issue #3:
 ## Garmin Connect Web edit UI — user check 2026-10-13
 
 User opened editing controls for their 2026-08-31 Garmin strength activity and confirmed **no Distance field was visible**. This is a direct user UI observation, not proof that no undocumented backend mutation is possible. Do not assume whole-activity distance can be edited in the supported Garmin Connect UI, and do not implement an undocumented summaryDTO mutation. Keep EGYM bike distance (14,980 m) as informational, **not syncable**, in a future read-only preview. No separate cycling activities or changes to Garmin heart rate/calories. Strength-set correction design remains separately gated by backups, full diff and explicit authorization.
+
+## Confirmed priorities and future recording strategy — 2026-10-13
+
+User clarification:
+1. **Primary project priority:** correct historical recorded Garmin **strength exercise weights** against actual EGYM sets. Preserve existing historical activities and all unrelated Garmin data (including cardio sets, timestamps, heart rate and calories). Repetition differences remain a separate reviewable dimension, not an implicit authorization to change reps.
+2. **Future training strategy:** record cycling or other cardio **separately from EGYM strength** on Garmin, as appropriate distinct activity types. Do not try to enrich future strength activities by inserting cycling distance. This recording workflow is conceptually distinct from historical strength-data correction.
+3. **Historical cycling:** leave existing cycling segments intact; no retroactive splitting, duplicate cardio activities or distance edits. The EGYM cycling research is useful background, but distance sync is explicitly deprioritized.
+4. **Write gate unchanged:** build a dry-run preview of old/new historical exercise weights (and separately flag repetition anomalies), validate source semantics including negative/eccentric mode, create/verifiably restore full raw Garmin backup, account for version/concurrency and unsupported API risk, and get explicit per-scope user approval before any Garmin mutation.
+
+This supersedes the earlier hypothetical bike-distance write candidate as a development priority. No Garmin write method has been authorized.
