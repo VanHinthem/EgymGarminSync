@@ -126,3 +126,20 @@ This command requires both `GARMIN_EMAIL`/`GARMIN_PASSWORD` and `EGYM_EMAIL`/`EG
 No state changes or update endpoints exist on this path. A successful printed difference is **not approval** to update Garmin, because EGYM negative resistance semantics and cross-system units are not conclusively validated.
 
 The CLI is intentionally restricted to this observed activity for the first live test. CI compilation and a Windows live run are still required; verify output before generalizing to automatic multi-session matching.
+
+## First integrated live comparison passed — 2026-10-13
+
+The user successfully ran `--compare-aug31` on Windows against both EGYM and Garmin. The read-only session matcher returned `Matched` for Garmin activity `24180037460` with start-to-EGYM-completion elapsed `00:44:04.454`. Both sides passed structural completeness, and the gated report returned `reviewable=True`.
+
+| EGYM activity ID | Exercise | EGYM observed kg | Garmin observed kg | EGYM minus Garmin kg |
+|---:|---|---:|---:|---:|
+| 329 | Leg Extension | 22 | 20 | +2 |
+| 330 | Abdominal Crunch | 30 | 24 | +6 |
+| 331 | Back Extension | 44 | 43 | +1 |
+| 332 | Leg Curl | 23 | 22 | +1 |
+| 333 | Chest Press | 21 | 22 | -1 |
+| 334 | Seated Row | 32 | 31 | +1 |
+| 335 | Lat Pulldown | 33 | 33 | 0 |
+| 581 | Leg Press | 95 | 89 | +6 |
+
+Seven exercise weights differed; one was equal. All values are **observations only**, assuming the Garmin raw weight-to-kg conversion. Negative EGYM resistance semantics are not yet verified and this output is not approval for writes. No mutation API was used.
