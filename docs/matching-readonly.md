@@ -202,3 +202,14 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 ```
 
 The output contains `Matched`, `MethodConflict`, `Ambiguous`, `NoCandidate` and `UnsupportedMethod` plus a summary. It intentionally **does not fetch all Garmin exercise sets** or claim that matched sessions have verified reps and weights. That will be a separate small slice once date/method pairing is checked. Garmin's latest-100-activities listing and EGYM's 180-day period have different coverage, so `NoCandidate` can indicate an unlisted Garmin activity rather than a missing workout. Incomplete or invalid EGYM timestamp data is excluded explicitly. The candidate window remains an engineering-only 0–120 minutes. No write paths exist.
+
+## Historical session matching verified live — 2026-10-13
+
+User executed `--history-match` on Windows. EGYM returned **28/28 normalized sessions** in its 180-day query; the Garmin recent-100 activities list contained **29 named EGYM activities**. The conservative two-sided, forward-only matcher reported:
+
+- `Matched=27` (27 of 28 EGYM sessions, 96.4%).
+- `MethodConflict=1` for 2026-06-24: EGYM `NegativeRepBased`, Garmin `EGYM Positief`, activity `23360196698`, elapsed `00:42:03.206`.
+- `Ambiguous=0`, `NoCandidate=0`, `UnsupportedMethod=0`.
+- The observed elapsed Garmin-start-to-EGYM-completion intervals range approximately 42–49 minutes in these 28 sessions. This is an elapsed event difference, not a clock offset.
+
+These are **session candidate** results, not per-activity exercise/rep/weight validations. The extra Garmin EGYM activity cannot be classified as an unmatched workout without comparing the different query scopes. The 24 June conflict must remain review-only, not an automatic method correction. No writes occurred.
