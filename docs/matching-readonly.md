@@ -363,3 +363,16 @@ User successfully ran `--cycling-aug31` using the GET-only diagnostic. The EGYM 
 ## Cycling summary reconciliation diagnostic (pending CI/live validation)
 
 The existing GET-only `--cycling-aug31` command now prints raw scalar values within EGYM bike `summary` (including `totalDuration`, `totalDistance`, `avgSpeed`, `avgPace`, heart-rate and incline values when present) and calculates independent raw sums of the nested set `duration` and `distance` values. Missing or nonnumeric set values are explicitly reported as unavailable instead of silently counted as zero. Values remain in source units: no unsupported speed or distance conversions. Compare summary fields with set sums and the already-observed Garmin bike set durations before researching Garmin activity-level enrichment. No writes.
+
+## Cycling EGYM summary fields validated live — 2026-08-31
+
+The user reran `--cycling-aug31` and obtained actual EGYM summary numbers for both segments:
+
+| Chronological segment | EGYM duration | EGYM distance | EGYM avgSpeed | EGYM kcal | Garmin matching record | Garmin duration |
+|---|---:|---:|---:|---:|---|---:|
+| Earlier bike, EGYM API entry #2 | 533 | 3870.0 | 7.26078799249531 | 61.125221768749995 | index 0, start 05:34:53 UTC | 537.995 |
+| Later bike, EGYM API entry #1 | 1502 | 11110.0 | 7.396804260985353 | 178.85613001250064 | index 34, start 06:18:56 UTC | 1500.0 |
+
+Set durations and distances sum to each segment's EGYM summary totals (only machine rounding differences). The ratios `3870 / 533 ≈ 7.26` and `11110 / 1502 ≈ 7.40` are consistent with EGYM recording distance in meters, duration in seconds and average speed in m/s (**strong inference**, not a formal API unit declaration). Derived speeds ≈26.1 and 26.6 km/h. All EGYM set `heartRate` values observed as zero, and summary `avgHeartRate` / `maxHeartRate` fields empty, so **no usable source heart-rate measurements** demonstrated.
+
+Correlate bike entries with Garmin using timestamps and duration, not API list order. The Garmin exerciseSets records show durations but did not expose distance/speed/calorie fields. The feasibility of enriching the same Garmin strength activity with those metrics remains unproven; further read-only investigation should check Garmin **activity-level summary/detail schemas** and whether metrics could be represented without replacing sensor FIT data, never assume arbitrary writeable JSON fields. No writes.
