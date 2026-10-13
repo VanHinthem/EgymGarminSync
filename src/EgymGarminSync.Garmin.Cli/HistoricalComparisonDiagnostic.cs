@@ -12,7 +12,7 @@ internal static class HistoricalComparisonDiagnostic
 {
     private static readonly long[] Ids = [333, 334, 581, 330, 335, 329, 331, 332];
 
-    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin, int maxSessions = 27)
+    public static async Task<int> RunAsync(GarminConnectContext context, GarminConnectClient garmin, int maxSessions = 27, bool excludeCorrectedAugust31 = false)
     {
         var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
         var password = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
@@ -79,7 +79,7 @@ internal static class HistoricalComparisonDiagnostic
                 Console.WriteLine($"{date} {match.Status}: no exercise comparisons.");
                 continue;
             }
-            if (visited >= maxSessions) continue;
+            if (excludeCorrectedAugust31 && match.GarminActivityId == 24180037460L)\n            {\n                Console.WriteLine($"{date} Garmin={match.GarminActivityId} ALREADY CORRECTED; excluded from remaining review.");\n                continue;\n            }\n            if (visited >= maxSessions) continue;
             visited++;
             try
             {
@@ -173,7 +173,7 @@ internal static class HistoricalComparisonDiagnostic
                 Console.WriteLine($"{date} Garmin={match.GarminActivityId} cannot compare ({ex.GetType().Name}); no correction inferred.");
             }
         }
-        Console.WriteLine($"Inspected={visited}; structural errors={failures}; no data written.");
+        Console.WriteLine($"Inspected={visited}; structural errors={failures}; correctedAug31Excluded={excludeCorrectedAugust31}; no data written.");
         return failures == 0 ? 0 : 1;
     }
 
