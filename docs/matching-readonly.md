@@ -42,3 +42,25 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 ```
 
 The EGYM diagnostic displays raw `completedAt`, `timezone`, and strength training methods; its timestamps are **not automatically interpreted as UTC**. The Garmin diagnostic lists the relevant activities with `startTimeGMT` labelled as UTC and `duration` seconds. Neither diagnostic links workouts yet, and both are GET-only. Compare multiple known days, including 2026-08-31 and 2026-08-07, before calibrating the session tolerance. Do not infer a clock offset from one sample or assume completion equals Garmin start.
+
+## Live timing observations — 2026-10-13
+
+User ran both live read-only time diagnostics. EGYM returned 28 workouts for the past 180 days; Garmin returned 29 named EGYM activities in its most recent 100 activities. These are different search scopes, so the count discrepancy is not proof of missing synchronization.
+
+For the August examples below, EGYM `completedAt` is a wall-clock value with `timezone=Europe/Amsterdam` (CEST, UTC+02). Garmin `startTimeGMT` is UTC.
+
+| Date | Garmin UTC start | EGYM local completion | Elapsed Garmin start → EGYM completion |
+|---|---|---|---|
+| 2026-08-31 | 05:34:53 | 08:18:57.454 | 44m 04.454s |
+| 2026-08-19 | 05:39:36 | 08:23:58.940 | 44m 22.940s |
+| 2026-08-17 | 05:36:16 | 08:22:40.456 | 46m 24.456s |
+| 2026-08-07 | 05:36:47 | 08:22:44.590 | 45m 57.590s |
+| 2026-08-05 | 05:35:01 | 08:21:48.342 | 46m 47.342s |
+
+These elapsed values are **not a clock offset**. Garmin's sampled recorded durations are approximately 70 minutes, so the EGYM completion event occurs well before the Garmin activity end. Date/method and validated event semantics are essential for matching.
+
+**Exception:** 2026-06-24 EGYM reports `NEGATIVE_REPBASED`, but the Garmin activity with a compatible time has name `EGYM Positief` (ID `23360196698`). This is a real cross-system *method label mismatch*. The conservative matcher must report it as not matched or conflicting, never silently force-match by date.
+
+Engineering-only four-hour tolerance in the current session matcher is wider than needed for these samples. Calibrate and revise deliberately with wider historical evidence and tests; do not assert a validated production threshold yet.
+
+No data was changed in either system.
