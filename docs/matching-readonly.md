@@ -229,3 +229,21 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 The command fetches the 180-day EGYM history once, obtains the latest 100 Garmin activities, runs two-sided session matching, and fetches Garmin exercise-set records for up to the requested number of **Matched** activities only. Method conflicts, ambiguities and no-candidate sessions are printed but excluded from recorded-set comparisons. Each matched session prints structural completeness, separate repetition disagreement counts, weight comparison status and per-exercise differences. Invalid records fail closed; if EGYM weights vary between rounds, the current per-exercise weight aggregate is not produced.
 
 This version is read-only and does not change templates, activity exercise sets, cycling or rests. Weight differences remain provisional given unverified resistance semantics. A historical run may uncover incomplete sessions or different Garmin shapes not present in the original two samples; review output before broadening.
+
+## First five historical exercise-set comparisons — live 2026-10-13
+
+User ran `--history-compare 5`: historical session candidates EGYM=28, Garmin=29, matched=27, method conflicts=1. **Five matched sessions inspected**, `structural errors=0`, and all five reported `complete=True`, `weightReviewable=True`; each had seven exercises with differing weights. These are read-only observations, not update approvals.
+
+| Date | Repetition mismatches | Weight differences | Notes |
+|---|---:|---:|---|
+| 2026-08-31 | 0 | 7 | Negative: all reps equal |
+| 2026-08-19 | 1 | 7 | Leg Curl (332): EGYM [15,15], Garmin [15,16] |
+| 2026-08-17 | 0 | 7 | Negative: all reps equal |
+| 2026-08-07 | 2 | 7 | Seated Row (334), Leg Curl (332): EGYM [20,19], Garmin [20,20] |
+| 2026-08-05 | 1 | 7 | Leg Press (581): EGYM [20,20], Garmin [0,20] |
+
+Additional **2026-08-05** anomaly: Seated Row (334) EGYM 40 kg vs Garmin 27 kg (`delta=+13 kg`), whereas on 2026-08-07 Garmin Row was 36 kg. The zero-rep Garmin set is structurally present but semantically suspicious; set completeness must remain separate from repetition validity. A `0` repetition count should be shown explicitly, not coerced to `20` or dismissed as a missing set.
+
+The 2026-06-24 method conflict was correctly printed and omitted from all exercise comparisons. No Garmin or EGYM writes were performed.
+
+Next validation should run `--history-compare 27` after CI review; watch for per-set variable weights, incomplete records and API errors before contemplating synchronization.
