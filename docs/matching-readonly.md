@@ -94,3 +94,13 @@ dotnet run --project src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csp
 ```
 
 EGYM checks the most recent twelve workouts for eight mapped machines with exactly two sets each. Garmin checks two previously verified sample activity IDs for sixteen strength set records. Neither command modifies Garmin, and neither authorizes linking mismatched methods, incomplete sessions or weight updates. Both need local CI and live output verification.
+
+## Live structural verification — 2026-10-13
+
+The user executed both `--circuit-check` commands on Windows with real, read-only API data.
+
+- EGYM returned 28 workouts for the 180-day query. The CLI evaluated the latest 12; **all 12** had eight recognized strength machines, exactly two set records per machine, no missing machines and no unexpected strength exercises.
+- Garmin inspected the previously identified **negative** activity `24180037460` and **positive** activity `23883291887`. Each returned 36 set records, 18 ACTIVE and 18 REST. The Garmin normalizer extracted 16 strength records in each activity: eight known machine identities with two sets each. The two indoor-bike records were excluded from strength counts.
+- These observations validate *structural completeness for the sampled records*, not every historical training or the correctness of resistance-weight semantics.
+- Matching by exercise identifier rather than recorded exercise order remains mandatory. Full end-to-end pairing and live weight-difference reporting are not yet implemented.
+- No Garmin or EGYM records were changed.
