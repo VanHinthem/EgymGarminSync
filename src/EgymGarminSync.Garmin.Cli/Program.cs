@@ -33,6 +33,12 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--history-match", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await HistoricalMatchingDiagnostic.RunAsync(client, 180);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Contains("--compare-aug31", StringComparer.OrdinalIgnoreCase) ||
         args.Contains("--compare-aug07", StringComparer.OrdinalIgnoreCase))
     {
