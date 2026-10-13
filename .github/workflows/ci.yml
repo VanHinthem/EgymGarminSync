@@ -17,5 +17,7 @@ jobs:
           dotnet-version: "10.0.x"
       - name: Restore and build CLI
         run: dotnet build src/EgymGarminSync.Cli/EgymGarminSync.Cli.csproj --configuration Release
+      - name: Build Garmin discovery prototype
+        run: dotnet build src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj --configuration Release
       - name: Execute unit tests
         run: dotnet test tests/EgymGarminSync.Egym.Tests/EgymGarminSync.Egym.Tests.csproj --configuration Release
