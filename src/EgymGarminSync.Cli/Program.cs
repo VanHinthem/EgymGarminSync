@@ -1,3 +1,4 @@
+using EgymGarminSync.Matching;
 using EgymGarminSync.Egym;
 
 var email = Environment.GetEnvironmentVariable("EGYM_EMAIL");
@@ -55,6 +56,19 @@ try
     }
 
     if (matchingTimes) return 0;
+    if (args.Contains("--circuit-check", StringComparer.OrdinalIgnoreCase))
+    {
+        var expectedIds = new long[] { 333, 334, 581, 330, 335, 329, 331, 332 };
+        foreach (var workout in sorted.Take(12))
+        {
+            var counts = CircuitJsonNormalizer.EgymCounts(workout);
+            var missing = expectedIds.Where(id => counts.Count(x => x.EgymActivityId == id && x.SetCount == 2) != 1).ToArray();
+            var unexpected = counts.Where(x => !expectedIds.Contains(x.EgymActivityId)).ToArray();
+            Console.WriteLine($"  EGYM circuit {Value(workout, "completedAt")}: strengthMachines={counts.Count}; twoSetsEach={missing.Length == 0 && unexpected.Length == 0}; missingOrIncomplete={string.Join(",", missing)}; extra={unexpected.Length}");
+        }
+        return 0;
+    }
+
 
     if (sorted.Length > 0 && sorted[0].TryGetProperty("exercises", out var latestExercises) &&
         latestExercises.ValueKind == System.Text.Json.JsonValueKind.Array)
