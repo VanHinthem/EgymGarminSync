@@ -23,3 +23,12 @@ Do not infer concentric or eccentric loads, a percentage multiplier, or a safe G
 2. Validate a negative session plus a regular positive session without inferring an eccentric factor from one exercise.
 3. Confirm Garmin activity set weight unit and the intended single-weight representation, then implement an independently reviewable diff and full backup/restore gate.
 4. No writes or activity modifications without explicit user approval.
+
+## User cross-check against EGYM app — 2026-10-13
+
+User manually checked the negative workout of 2026-08-31 in the EGYM app. Visible workout-history weights match the EGYM API set `weight` values for:
+- Seated Row: app 32 kg, API 32 kg
+- Chest Press: app 21 kg, API 21 kg
+- Leg Curl: app 23 kg, API 23 kg
+
+This confirms the API reflects the **app-displayed workout-history weight** for these three exercises. It does not identify that value as concentric or eccentric mechanical resistance, and does not establish a safe Garmin write interface. Remaining five machine values have not been independently enumerated by the user; do not claim all eight individually verified.
