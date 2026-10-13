@@ -186,3 +186,9 @@ The user ran both combined read-only diagnostics after repetition support was ad
 - **2026-08-31, negative** (Garmin activity `24180037460`): session matched; circuit structurally complete; **all 8 exercises** reported `[15,15]` in both systems. Weights: seven differences, one equal.
 
 **Interpretation:** structural completeness (eight machines, two sets each) does not imply correct repetitions. Treat weights, repetition differences and structural completeness as separate report dimensions. The prototype's `reviewable=True` currently reflects the weight-comparison gate and **does not mean repetition counts agree or Garmin writes are approved**. No writes occurred.
+
+## Integrated repetition review status
+
+The combined read-only report now holds `Repetitions` and `RepetitionsAllEqual` independently from `HasReviewableDifferences` (weight comparison status). Live output labels these separately as `weightReviewable` and `repetitionsAllEqual`, so a positive session with two 19-rep second sets does not appear fully matching just because the circuit is structurally complete.
+
+Missing repetition inputs do not imply equality. Unit tests cover the observed Aug 7 mismatches and Aug 31 equality. This is for human review only, not an authorization to write.
