@@ -6,7 +6,9 @@ namespace EgymGarminSync.Matching;
 /// </summary>
 public static class WorkoutSessionMatcher
 {
-    private static readonly TimeSpan DefaultTolerance = TimeSpan.FromHours(4);
+    // Provisional candidate window based on observed ~44-47-minute start-to-completion gaps.
+    // Not yet a validated production matching threshold.
+    private static readonly TimeSpan DefaultTolerance = TimeSpan.FromHours(2);
 
     public static IReadOnlyList<SessionMatch> Match(
         IReadOnlyCollection<EgymWorkoutSession> egym,
@@ -30,13 +32,15 @@ public static class WorkoutSessionMatcher
             throw new ArgumentException("Session IDs must be present and unique.");
 
         var results = new List<SessionMatch>();
-        // Build a bipartite candidate graph: matching variant AND plausible session time.
-        // A candidate is safe only when it is unique in both directions.
+        // Completion must follow Garmin start. Retain ALL nearby sessions before
+        // checking method; otherwise a mislabeled session could be silently ignored.
         var candidates = egym.ToDictionary(
             e => e.Id,
-            e => garmin.Where(g => Compatible(e.Method, g.Variant) &&
-                                 AbsoluteDifference(e.CompletedAtUtc, g.StartedAtUtc) <= threshold)
-                       .Select(g => g.Id).ToArray());
+            e => garmin.Where(g =>
+            {
+                var elapsed = e.CompletedAtUtc - g.StartedAtUtc;
+                return elapsed >= TimeSpan.Zero && elapsed <= threshold;
+            }).ToArray());
 
         foreach (var e in egym)
         {
@@ -46,20 +50,29 @@ public static class WorkoutSessionMatcher
                 continue;
             }
 
-            var matches = candidates[e.Id];
-            if (matches.Length == 0)
+            var nearby = candidates[e.Id];
+            if (nearby.Length == 0)
             {
                 results.Add(new(e.Id, null, SessionMatchStatus.NoCandidate, null));
                 continue;
             }
-            if (matches.Length > 1 || candidates.Count(pair => pair.Value.Contains(matches[0])) != 1)
+            // Do not auto-pick one of several sessions, even if only one
+            // variant agrees. A mislabeled workout needs explicit review.
+            if (nearby.Length > 1 ||
+                candidates.Count(pair => pair.Value.Any(g => g.Id == nearby[0].Id)) != 1)
             {
                 results.Add(new(e.Id, null, SessionMatchStatus.Ambiguous, null));
                 continue;
             }
-            var candidate = garmin.Single(g => g.Id == matches[0]);
-            results.Add(new(e.Id, candidate.Id, SessionMatchStatus.Matched,
-                AbsoluteDifference(e.CompletedAtUtc, candidate.StartedAtUtc)));
+
+            var candidate = nearby[0];
+            var elapsed = e.CompletedAtUtc - candidate.StartedAtUtc;
+            if (!Compatible(e.Method, candidate.Variant))
+            {
+                results.Add(new(e.Id, candidate.Id, SessionMatchStatus.MethodConflict, elapsed));
+                continue;
+            }
+            results.Add(new(e.Id, candidate.Id, SessionMatchStatus.Matched, elapsed));
         }
         return results;
     }
@@ -75,14 +88,12 @@ public static class WorkoutSessionMatcher
     private static bool IsSupportedMethod(EgymTrainingMethod method) =>
         method is EgymTrainingMethod.RegularRepBased or EgymTrainingMethod.NegativeRepBased;
 
-    private static TimeSpan AbsoluteDifference(DateTimeOffset a, DateTimeOffset b) =>
-        (a - b).Duration();
 }
 
 public enum EgymTrainingMethod { Unknown, RegularRepBased, NegativeRepBased }
 public enum GarminTrainingVariant { Unknown, Positive, Negative }
 public sealed record EgymWorkoutSession(string Id, DateTimeOffset CompletedAtUtc, EgymTrainingMethod Method);
 public sealed record GarminWorkoutSession(long Id, DateTimeOffset StartedAtUtc, GarminTrainingVariant Variant);
-public enum SessionMatchStatus { Matched, NoCandidate, Ambiguous, UnsupportedMethod }
+public enum SessionMatchStatus { Matched, NoCandidate, Ambiguous, UnsupportedMethod, MethodConflict }
 public sealed record SessionMatch(
     string EgymWorkoutId, long? GarminActivityId, SessionMatchStatus Status, TimeSpan? TimeDifference);
