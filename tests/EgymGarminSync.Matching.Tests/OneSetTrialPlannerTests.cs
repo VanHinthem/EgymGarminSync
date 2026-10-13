@@ -17,8 +17,8 @@ public sealed class OneSetTrialPlannerTests
             ("CRUNCH", "WEIGHTED_THORACIC_CRUNCHES_ON_FOAM_ROLLER"), ("REST", null),
             ("PULL_UP", "LAT_PULLDOWN"), ("REST", null),
             ("CRUNCH", "WEIGHTED_LEG_EXTENSIONS"), ("REST", null),
-            ("HYPEREXTENSION", "WEIGHTED_STATIC_BACK_EXTENSION"), ("REST", null),
-            ("LEG_CURL", "WEIGHTED_LEG_CURL"), ("REST", null)
+            ("HYPEREXTENSION", "WEIGHTED_STATIC_BACK_EXTENSION"),
+            ("LEG_CURL", "WEIGHTED_LEG_CURL")
         };
         var all = new JsonArray();
         for (var j = 0; j < 2; j++)
@@ -30,6 +30,8 @@ public sealed class OneSetTrialPlannerTests
                     ["exercises"] = new JsonArray(new JsonObject { ["category"] = category, ["name"] = name }),
                     ["other"] = "must survive"
                 });
+        for (var i = 0; i < 4; i++)
+            all.Add(new JsonObject { ["setType"] = "REST", ["other"] = "must survive" });
         return new JsonObject { ["exerciseSets"] = all, ["keep"] = true }.ToJsonString();
     }
 
@@ -43,7 +45,7 @@ public sealed class OneSetTrialPlannerTests
         GarminWeightOnlyPreflight.ValidateOnlyApprovedWeightsChanged(json, proposal.ProposedJson, proposal.Changes);
         var result = JsonNode.Parse(proposal.ProposedJson)!;
         Assert.Equal(21000, result["exerciseSets"]![2]!["weight"]!.GetValue<decimal>());
-        Assert.Equal(22000, result["exerciseSets"]![20]!["weight"]!.GetValue<decimal>());
+        Assert.Equal(22000, result["exerciseSets"]![18]!["weight"]!.GetValue<decimal>());
     }
 
     [Fact]
