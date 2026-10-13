@@ -23,23 +23,26 @@ public static class ReadOnlyComparisonReport
 
         var completeness = StrengthSessionCompleteness.Check(
             egymCounts, garminCounts, expectedMachineIds, expectedSetsPerMachine);
-        if (!completeness.IsComplete)
-            return new(session, completeness, [], false, "Incomplete circuit: no weight comparison");
+        var expectedCoverage = completeness.Issues.All(issue =>
+            issue.Reason == "UnexpectedExercise" && issue.Side == CompletenessSide.Garmin);
+        var repetitionComparisons = expectedCoverage && egymReps is not null && garminReps is not null
+            ? RepetitionMatcher.Compare(egymReps, garminReps, expectedSetsPerMachine)
+            : [];
+        var repetitionsComplete = repetitionComparisons.Count == expectedMachineIds.Count &&
+            expectedMachineIds.All(id => repetitionComparisons.Count(x => x.EgymActivityId == id) == 1) &&
+            repetitionComparisons.All(x => x.Status == RepetitionStatus.Equal);
+        if (!expectedCoverage)
+            return new(session, completeness, [], false, "Expected circuit sets incomplete; no weight comparison")
+            { Repetitions = repetitionComparisons, RepetitionsAllEqual = repetitionsComplete };
 
         if (egymWeights.Count != expectedMachineIds.Count ||
             egymWeights.Select(x => x.EgymActivityId).Distinct().Count() != expectedMachineIds.Count ||
             expectedMachineIds.Any(id => egymWeights.Count(x => x.EgymActivityId == id) != 1))
-            return new(session, completeness, [], false, "Missing or duplicate EGYM weight identities");
+            return new(session, completeness, [], false, "Missing or duplicate EGYM weight identities")
+            { Repetitions = repetitionComparisons, RepetitionsAllEqual = repetitionsComplete };
 
         var differences = StrengthWeightMatcher.Compare(egymWeights, garminWeights);
-        var repetitionComparisons = egymReps is not null && garminReps is not null
-            ? RepetitionMatcher.Compare(egymReps, garminReps, expectedSetsPerMachine)
-            : [];
-        var repetitionsComplete = egymReps is not null && garminReps is not null &&
-            repetitionComparisons.Count == expectedMachineIds.Count &&
-            expectedMachineIds.All(id => repetitionComparisons.Count(x => x.EgymActivityId == id) == 1) &&
-            repetitionComparisons.All(x => x.Status == RepetitionStatus.Equal);
-        var reviewable = differences.All(x => x.Status is MatchStatus.Equal or MatchStatus.Different);
+        var reviewable = differences.Count == expectedMachineIds.Count && differences.All(x => x.Status is MatchStatus.Equal or MatchStatus.Different);
         return new(session, completeness, differences, reviewable,
             reviewable ? "Read-only comparison available; weights require unit/negative-method verification" :
                 "Unmapped, missing or ambiguous recorded weights")
