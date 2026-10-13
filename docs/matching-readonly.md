@@ -171,3 +171,9 @@ The user successfully executed `--compare-aug07` against both live read-only API
 | 581 | Leg Press | 115 | 103 | +12 |
 
 Seven differences and one equal reading, despite structurally complete sets. Observations only; this does **not** establish that Garmin values should be overwritten. Exact unit and machine-load semantics still require verification, including for positive workouts. No writes occurred.
+
+## Per-set repetition comparison (2026-10-13)
+
+Live combined diagnostics for `--compare-aug07` and `--compare-aug31` now also read EGYM `sets[].numberOfReps` and Garmin `exerciseSets[].repetitionCount`, independently of weight comparisons. Expected typical schemes are 20 reps per set for regular/positive workouts and 15 for negative workouts, but actual observed values remain authoritative; a mismatch is shown rather than coerced to the template.
+
+The report shows two repetition values per machine for each system and the result `Equal`, `Different`, or `MissingOrInvalidSets`. Because per-set identity/order correspondence is not established, repetitions are compared as multisets per exercise, so swapped set ordering does not produce a false difference. This does **not** prove which specific Garmin set maps to which EGYM set if their counts vary. Bike/REST are excluded. Five tests cover both schemes, discrepancy, reversed set order, and absent sets. CI and live runs still require validation. No write operations are introduced.
