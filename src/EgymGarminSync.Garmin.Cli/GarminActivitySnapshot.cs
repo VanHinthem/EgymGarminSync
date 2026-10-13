@@ -11,9 +11,11 @@ internal static class GarminActivitySnapshot
 {
     internal const long August31ActivityId = 24180037460L;
 
-    public static async Task<int> RunAsync(GarminConnectContext context)
+    public static Task<int> RunAsync(GarminConnectContext context) => RunAsync(context, August31ActivityId);
+
+    public static async Task<int> RunAsync(GarminConnectContext context, long id)
     {
-        const long id = August31ActivityId;
+        if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
         // Avoid overwriting an existing capture and never save sensitive data in the repository.
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "EgymGarminSync", "backups");
