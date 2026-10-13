@@ -25,10 +25,22 @@ internal static class Aug31MetadataDiff
         var changes = new List<string>();
         Compare(original.RootElement, live, "$", changes);
         Console.WriteLine($"READ-ONLY activity metadata diff: {changes.Count} changed paths.");
+        if (original.RootElement.TryGetProperty("summaryDTO", out var oldSummary) &&
+            live.TryGetProperty("summaryDTO", out var newSummary))
+        {
+            Console.WriteLine($"  summaryDTO.totalSets before={SafeNumber(oldSummary, "totalSets")}, after={SafeNumber(newSummary, "totalSets")}");
+        }
         foreach (var path in changes.Take(40)) Console.WriteLine($"  {path}");
         if (changes.Count > 40) Console.WriteLine($"  ... {changes.Count - 40} additional paths omitted.");
         Console.WriteLine("No Garmin writes.");
         return 0;
+    }
+
+    private static string SafeNumber(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value)) return "(absent)";
+        return value.ValueKind == JsonValueKind.Number ? value.GetRawText() :
+            value.ValueKind == JsonValueKind.Null ? "(null)" : "(non-numeric)";
     }
 
     private static void Compare(JsonElement before, JsonElement after, string path, List<string> changed)
