@@ -177,3 +177,12 @@ Seven differences and one equal reading, despite structurally complete sets. Obs
 Live combined diagnostics for `--compare-aug07` and `--compare-aug31` now also read EGYM `sets[].numberOfReps` and Garmin `exerciseSets[].repetitionCount`, independently of weight comparisons. Expected typical schemes are 20 reps per set for regular/positive workouts and 15 for negative workouts, but actual observed values remain authoritative; a mismatch is shown rather than coerced to the template.
 
 The report shows two repetition values per machine for each system and the result `Equal`, `Different`, or `MissingOrInvalidSets`. Because per-set identity/order correspondence is not established, repetitions are compared as multisets per exercise, so swapped set ordering does not produce a false difference. This does **not** prove which specific Garmin set maps to which EGYM set if their counts vary. Bike/REST are excluded. Five tests cover both schemes, discrepancy, reversed set order, and absent sets. CI and live runs still require validation. No write operations are introduced.
+
+## Live per-set repetitions verified — 2026-10-13
+
+The user ran both combined read-only diagnostics after repetition support was added:
+
+- **2026-08-07, positive** (Garmin activity `23883291887`): session matched; circuit structurally complete; **6 of 8 exercises** have identical repetition counts. EGYM Leg Curl (`activityId=332`) reported `[20,19]` versus Garmin `[20,20]`; EGYM Seated Row (`activityId=334`) reported `[20,19]` versus Garmin `[20,20]`. All other strength exercises reported `[20,20]` in both systems. These are **39 versus 40 reps per exercise** on those two machines. Weights: seven differences, one equal.
+- **2026-08-31, negative** (Garmin activity `24180037460`): session matched; circuit structurally complete; **all 8 exercises** reported `[15,15]` in both systems. Weights: seven differences, one equal.
+
+**Interpretation:** structural completeness (eight machines, two sets each) does not imply correct repetitions. Treat weights, repetition differences and structural completeness as separate report dimensions. The prototype's `reviewable=True` currently reflects the weight-comparison gate and **does not mean repetition counts agree or Garmin writes are approved**. No writes occurred.
