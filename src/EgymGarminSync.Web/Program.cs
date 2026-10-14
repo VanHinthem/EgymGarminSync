@@ -58,6 +58,7 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
 
 app.MapGet("/api/garmin/sessions", GarminReadOnlySessions.GetAsync);
 app.MapGet("/api/compare", ReadOnlySetComparison.GetAsync);
+app.MapPost("/api/sync/preview", GarminEditPreview.PreviewAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
     "Garmin writes are disabled in this first web slice.", statusCode: 501));
