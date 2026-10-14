@@ -38,6 +38,7 @@ function App() {
   const [draft,setDraft] = useState<Draft>({})
   const [error,setError] = useState('')
   const [loading,setLoading] = useState(false)
+  const [lastSync,setLastSync] = useState<string | null>(null)
   const [review,setReview] = useState(false)
   const [previewResult,setPreviewResult] = useState('')
   const [liveRows,setLiveRows] = useState<SetRow[]>([])
@@ -63,7 +64,7 @@ function App() {
     if(mode!=='live'||!selectedEgym||!selectedGarmin){setLiveRows([]);setWarnings([]);setSetsError('');return}
     const abort=new AbortController()
     setSetsLoading(true);setLiveRows([]);setWarnings([]);setSetsError('')
-    fetch(`/api/compare?egymId=${encodeURIComponent(selectedEgym)}&garminId=${encodeURIComponent(selectedGarmin)}`,{signal:abort.signal})
+    fetch(`/api/cache/compare?egymId=${encodeURIComponent(selectedEgym)}&garminId=${encodeURIComponent(selectedGarmin)}`,{signal:abort.signal})
       .then(async response=>{if(!response.ok)throw new Error(`Setvergelijking niet beschikbaar (HTTP ${response.status}).`);return response.json()})
       .then((data:{rows:SetRow[],warnings:string[]})=>{if(!abort.signal.aborted){setLiveRows(data.rows);setWarnings(data.warnings??[])}})
       .catch(err=>{if(!abort.signal.aborted)setSetsError(err instanceof Error?err.message:'Onbekende fout')})
@@ -95,31 +96,40 @@ function App() {
     }catch{setPreviewResult('Servercontrole niet bereikbaar. Er is niets opgeslagen.')}
   }
   function pickEgym(id:string){setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
+  async function readCache(){
+    const [eResponse,gResponse,statusResponse]=await Promise.all([
+      fetch('/api/cache/sessions?source=EGYM'),
+      fetch('/api/cache/sessions?source=Garmin'),
+      fetch('/api/cache/status')
+    ])
+    if(!eResponse.ok||!gResponse.ok||!statusResponse.ok)
+      throw new Error('Lokale database niet beschikbaar. Controleer of de API draait.')
+    const e=await eResponse.json() as Session[]
+    const g=await gResponse.json() as Session[]
+    const status=await statusResponse.json() as {checkpoints:{source:string,lastSuccessfulUtc:string}[]}
+    setEgym(e);setGarmin(g);setMode('live')
+    setSelectedEgym(e[0]?.id??'')
+    setSelectedGarmin(propose(e[0],g))
+    setLastSync(status.checkpoints.find(c=>c.source==='EGYM')?.lastSuccessfulUtc??null)
+    setDraft({});setReview(false)
+  }
+  useEffect(()=>{readCache().catch(e=>setError(e instanceof Error?e.message:'Kan lokale database niet lezen'))},[])
   async function loadEgym(){
     setLoading(true);setError('')
-    try {
-      const response=await fetch('/api/egym/sessions?days=180')
-      if(!response.ok)throw new Error(`EGYM ophalen niet beschikbaar (HTTP ${response.status}). Controleer de lokale API en serverconfiguratie.`)
-      const data=(await response.json() as Session[]).sort((a,b)=>{
-        const left=a.completedAt ? Date.parse(a.completedAt) : NaN
-        const right=b.completedAt ? Date.parse(b.completedAt) : NaN
-        const la=Number.isFinite(left)?left:-Infinity
-        const rb=Number.isFinite(right)?right:-Infinity
-        return rb-la
-      })
-      const garminResponse=await fetch('/api/garmin/sessions')
-      if(!garminResponse.ok) throw new Error(`Garmin ophalen niet beschikbaar (HTTP ${garminResponse.status}). De demomodus blijft actief.`)
-      const garminData=await garminResponse.json() as Session[]
-      setEgym(data);setGarmin(garminData);setMode('live');setSelectedEgym(data[0]?.id??'');setSelectedGarmin(propose(data[0],garminData));setDraft({});setReview(false)
-    }catch(e){setError(e instanceof Error?e.message:'Onbekende fout')}
+    try{
+      const response=await fetch('/api/cache/sync',{method:'POST'})
+      if(!response.ok)throw new Error(`Synchronisatie mislukt (HTTP ${response.status}).`)
+      await readCache()
+    }catch(e){setError(e instanceof Error?e.message:'Synchronisatie mislukt')}
     finally{setLoading(false)}
   }
   return <main className="app">
     <header className="topbar">
       <div className="brand"><div className="brandIcon"><Dumbbell size={22}/></div><div><strong>EGYM <span>Garmin Sync</span></strong><small>Trainingen vergelijken en synchroniseren</small></div></div>
-      <div className="status"><span className="dot"/> {mode==='demo'?'Demomodus':'EGYM + Garmin verbonden · read-only'}</div>
+      <div className="status"><span className="dot"/> {mode==='demo'?'Demomodus':'Lokale SQLite-cache · read-only'}</div>
     </header>
-    <section className="heading"><div><div className="eyebrow">TRAININGEN</div><h1>Sessies vergelijken</h1><p>Kies een EGYM-training en controleer de voorgestelde Garmin-match.</p></div><button className="primary" disabled={loading} onClick={loadEgym}><CloudDownload size={17}/>{loading?'Ophalen...':'EGYM-sessies laden'}</button></section>
+    <section className="heading"><div><div className="eyebrow">TRAININGEN</div><h1>Sessies vergelijken</h1><p>Kies een lokaal opgeslagen EGYM-training en controleer de Garmin-match.</p></div><button className="primary" disabled={loading} onClick={loadEgym}><CloudDownload size={17}/>{loading?'Synchroniseren...':'Synchroniseren'}</button></section>
+    {lastSync&&<p className="note">Laatste synchronisatie: {new Date(lastSync).toLocaleString('nl-NL')}</p>}
     {error && <div className="warning"><CircleAlert size={17}/>{error}</div>}
     {mode==='demo'&&<div className="notice"><CircleAlert size={17}/> Dit is een interactieve demo met voorbeeldgegevens. Live Garmin-data en synchronisatie zijn nog niet aangesloten.</div>}
     <section className="sessionGrid">
