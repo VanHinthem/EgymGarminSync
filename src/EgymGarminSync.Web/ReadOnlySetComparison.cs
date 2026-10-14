@@ -22,6 +22,14 @@ internal static class ReadOnlySetComparison
         [332]=("Leg Curl","LEG_CURL","WEIGHTED_LEG_CURL")
     };
 
+    private static string GarminDisplayName(string category, string? exercise)
+    {
+        // Display the Garmin identity, rather than silently reusing the EGYM name.
+        var raw = exercise ?? category;
+        return string.Join(" ", raw.Split('_', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..].ToLowerInvariant()));
+    }
+
     public static async Task<IResult> GetAsync(string egymId, long garminId)
     {
         if (!egymId.StartsWith("egym-", StringComparison.Ordinal) ||
@@ -96,7 +104,7 @@ internal static class ReadOnlySetComparison
                         id = $"{id}-{targets[set].position}",
                         exercise = mapping.Name,
                         egymExercise = mapping.Name,
-                        garminExercise = mapping.Exercise ?? mapping.Category,
+                        garminExercise = GarminDisplayName(mapping.Category, mapping.Exercise),
                         set = set + 1,
                         egymKg = source.GetProperty("weight").GetDecimal(),
                         garminKg = target.GetProperty("weight").GetDecimal() / 1000m,
