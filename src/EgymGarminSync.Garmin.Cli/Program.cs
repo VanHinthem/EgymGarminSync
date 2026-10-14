@@ -57,7 +57,7 @@ if (args.Length == 1 && args[0].Equals("--token-cache-status", StringComparison.
 WindowsGarminTokenCache? tokenCache = null;
 try
 {
-    using var http = new HttpClient();
+    using var http = new HttpClient(GarminIpv4Transport.Create());
     tokenCache = new WindowsGarminTokenCache(email);
     if (tokenCache.IsInLoginCooldown(out var retryAfterUtc))
     {
