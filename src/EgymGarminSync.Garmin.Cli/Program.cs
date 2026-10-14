@@ -6,6 +6,9 @@ using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
 
+if (args.Length == 1 && args[0].Equals("--offline-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    return await OneRepetitionRestore.RunAsync(null, execute: false);
+
 if (args.Contains("--offline-preflight-aug31", StringComparer.OrdinalIgnoreCase))
     return await OfflineSnapshotPreflight.RunAsync();
 
@@ -89,6 +92,12 @@ try
         }
         Console.WriteLine("GET-only snapshot. Ensure this is a deliberately created disposable test activity.");
         var result = await GarminActivitySnapshot.RunAsync(context, testId);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--live-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await OneRepetitionRestore.RunAsync(context, execute: true);
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
