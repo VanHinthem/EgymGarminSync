@@ -209,7 +209,7 @@ try
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var probe = new GarminAuthTraceTokenCache(tokenCache);
         var ipv4Only = args[0].Equals("--auth-trace-ipv4", StringComparison.OrdinalIgnoreCase);
-        using var transport = ipv4Only ? GarminIpv4Transport.Create() : new HttpClientHandler();
+        using HttpMessageHandler transport = ipv4Only ? GarminIpv4Transport.Create() : new HttpClientHandler();
         using var traceHttp = new HttpClient(new GarminHttpTraceHandler(transport));
         var traceContext = new GarminConnectContext(traceHttp,
             new BasicAuthParameters(email, password), new NotImplementedMfaCode(), probe);
