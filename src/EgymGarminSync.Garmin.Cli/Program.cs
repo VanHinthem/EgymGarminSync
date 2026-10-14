@@ -31,10 +31,15 @@ if (args.Length == 1 && args[0].Equals("--token-cache-status", StringComparison.
         var cache = new WindowsGarminTokenCache(email);
         var cooldown = cache.IsInLoginCooldown(out var retryAfterUtc);
         var oauth1 = await cache.GetOAuth1Token(CancellationToken.None);
+        var metadata = cache.ReadStatus();
         var oauth2 = await cache.GetOAuth2Token(CancellationToken.None);
         Console.WriteLine("Garmin local token cache (offline, read-only):");
         Console.WriteLine($"OAuth1 present: {oauth1 is not null}");
+        Console.WriteLine($"OAuth2 present: {metadata.OAuth2Present}");
+        Console.WriteLine($"OAuth2 status: {metadata.OAuth2Status}");
         Console.WriteLine($"OAuth2 usable (>60s remaining): {oauth2 is not null}");
+        if (metadata.OAuth2ExpiresAtUtc is { } expires)
+            Console.WriteLine($"OAuth2 expires (local time): {expires.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
         Console.WriteLine($"Login cooldown active: {cooldown}");
         if (cooldown)
             Console.WriteLine($"Retry after (local time): {retryAfterUtc.ToLocalTime():yyyy-MM-dd HH:mm}");
