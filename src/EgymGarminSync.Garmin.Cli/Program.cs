@@ -202,18 +202,23 @@ try
         if (exitCode == 0) tokenCache.ClearLoginCooldown();
         return exitCode;
     }
-    if (args.Length == 1 && args[0].Equals("--auth-trace", StringComparison.OrdinalIgnoreCase))
+    if (args.Length == 1 && (args[0].Equals("--auth-trace", StringComparison.OrdinalIgnoreCase) ||
+        args[0].Equals("--auth-trace-ipv4", StringComparison.OrdinalIgnoreCase)))
     {
         // Explicit diagnostic: one Garmin GET only. Logs do not contain HTTP headers, URLs or token bodies.
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var probe = new GarminAuthTraceTokenCache(tokenCache);
-        using var traceHttp = new HttpClient(new GarminHttpTraceHandler(new HttpClientHandler()));
+        var ipv4Only = args[0].Equals("--auth-trace-ipv4", StringComparison.OrdinalIgnoreCase);
+        using var transport = ipv4Only ? GarminIpv4Transport.Create() : new HttpClientHandler();
+        using var traceHttp = new HttpClient(new GarminHttpTraceHandler(transport));
         var traceContext = new GarminConnectContext(traceHttp,
             new BasicAuthParameters(email, password), new NotImplementedMfaCode(), probe);
         var traceClient = new GarminConnectClient(traceContext);
         try
         {
-            Console.WriteLine("Garmin auth trace: one read-only activity request.");
+            Console.WriteLine(ipv4Only
+                ? "Garmin auth trace: IPv4-only transport, one read-only activity request."
+                : "Garmin auth trace: default transport, one read-only activity request.");
             var activities = await traceClient.GetActivities(0, 1);
             Console.WriteLine($"SUCCESS: activities={activities.Length}; elapsedMs={watch.ElapsedMilliseconds}; cacheEvents={probe.EventSummary}");
             tokenCache.ClearLoginCooldown();
