@@ -2,15 +2,29 @@ using EgymGarminSync.Egym;
 using EgymGarminSync.Web;
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://127.0.0.1:5187");
 builder.Services.AddCors(options => options.AddPolicy("LocalUi", policy =>
     policy.WithOrigins("http://127.0.0.1:5173", "http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
+var dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "EgymGarminSync", "sync.db");
+Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+builder.Services.AddDbContext<SyncDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+    await scope.ServiceProvider.GetRequiredService<SyncDbContext>().Database.EnsureCreatedAsync();
 app.UseCors("LocalUi");
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", writeEnabled = false }));
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok", writeEnabled = false, database = "SQLite" }));
+app.MapGet("/api/cache/status", async (SyncDbContext db) => Results.Ok(new {
+    sessions = await db.Sessions.CountAsync(),
+    egym = await db.Sessions.CountAsync(s => s.Source == "EGYM"),
+    garmin = await db.Sessions.CountAsync(s => s.Source == "Garmin"),
+    checkpoints = await db.Checkpoints.AsNoTracking().ToArrayAsync(),
+    snapshots = await db.GarminSnapshots.CountAsync()
+}));
 
 app.MapGet("/api/egym/sessions", async (int? days) =>
 {
