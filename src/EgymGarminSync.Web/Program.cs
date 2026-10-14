@@ -132,6 +132,7 @@ app.MapGet("/api/cache/compare", async (string egymId, long garminId, SyncDbCont
 app.MapPost("/api/sync/preview", GarminEditPreview.PreviewAsync);
 app.MapPost("/api/sync/prepare", GarminEditPreview.PrepareAsync);
 app.MapGet("/api/sync/restore-plan/{activityId:long}", GarminRestorePlan.GetAsync);
+app.MapPost("/api/sync/rehearse", GarminWriteRehearsal.RehearseAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
     "Garmin writes are disabled in this first web slice.", statusCode: 501));
