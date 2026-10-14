@@ -21,7 +21,7 @@ internal static class GarminWriteRehearsal
             return Results.BadRequest(new { error = "Select a snapshot and 1..72 edits." });
         var snapshot = await db.GarminSnapshots.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == request.SnapshotId);
-        if (snapshot is null || snapshot.Kind != "Preflight")
+        if (snapshot is null || snapshot.Kind is not ("Preflight" or "FullPreflight"))
             return Results.NotFound(new { error = "Valid Preflight snapshot not found." });
 
         if (Hash(snapshot.ExerciseSetsJson) != snapshot.SetsSha256 ||
@@ -57,6 +57,7 @@ internal static class GarminWriteRehearsal
                 proposedSha256 = Hash(proposed),
                 recoverySourceSha256 = snapshot.SetsSha256,
                 recoverySourceAvailable = true,
+                fullActivityBackup = snapshot.Kind == "FullPreflight",
                 message = "Offline full replace-all payload validated. Repetition writes are not proven against Garmin. No Garmin GET, PUT, or restore performed."
             });
         }
