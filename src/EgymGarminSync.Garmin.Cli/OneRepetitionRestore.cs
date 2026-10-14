@@ -13,29 +13,24 @@ internal static class OneRepetitionRestore
     private const int Index = 2;
     private static string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
-    internal static async Task<int> RunAsync(GarminConnectContext? context, bool execute)
+    internal static async Task<int> RunAsync(GarminConnectContext? context, bool execute, string backupFolder)
     {
         try
         {
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "EgymGarminSync", "live-trials");
-            if (!Directory.Exists(root)) return Stop("No live-trial backup directory.");
-            var candidates = new List<(string Folder, TrialManifest Manifest)>();
-            foreach (var dir in Directory.GetDirectories(root, $"{Id}-*"))
-            {
-                var path = Path.Combine(dir, "manifest.json");
-                if (!File.Exists(path)) continue;
-                TrialManifest? manifest;
-                try { manifest = JsonSerializer.Deserialize<TrialManifest>(await File.ReadAllTextAsync(path)); }
-                catch (JsonException) { continue; }
-                if (manifest is null || manifest.ActivityId != Id || manifest.SetIndex != Index ||
-                    manifest.From != 15 || manifest.To != 14) continue;
-                candidates.Add((dir,manifest));
-            }
-            // Never silently choose among several previous trials.
-            if (candidates.Count != 1)
-                return Stop($"Expected exactly one matching live-trial backup; found {candidates.Count}. Refusing ambiguous restore.");
-            var (folder, m) = candidates[0];
+            var root = Path.GetFullPath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "EgymGarminSync", "live-trials"));
+            var folder = Path.GetFullPath(backupFolder);
+            var parent = Path.GetDirectoryName(folder);
+            if (!string.Equals(parent, root, StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFileName(folder).StartsWith($"{Id}-", StringComparison.Ordinal) ||
+                !Directory.Exists(folder))
+                return Stop("Backup folder must be a direct child of the local live-trials directory for the target activity.");
+            var manifestPath = Path.Combine(folder, "manifest.json");
+            if (!File.Exists(manifestPath)) return Stop("Backup manifest missing.");
+            var m = JsonSerializer.Deserialize<TrialManifest>(await File.ReadAllTextAsync(manifestPath));
+            if (m is null || m.ActivityId != Id || m.SetIndex != Index || m.From != 15 || m.To != 14)
+                return Stop("Backup manifest does not match the approved repetition trial.");
             var activityJson = await File.ReadAllTextAsync(Path.Combine(folder, "activity.json"));
             var before = await File.ReadAllTextAsync(Path.Combine(folder, "exerciseSets.json"));
             var changed = await File.ReadAllTextAsync(Path.Combine(folder, "proposed.json"));
