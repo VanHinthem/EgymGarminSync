@@ -23,6 +23,7 @@ internal static class GarminRestorePlan
             .SingleOrDefaultAsync(s => s.GarminActivityId == activityId);
         var items = snapshots.Select(s => new {
             id = s.Id, kind = s.Kind, capturedUtc = s.CapturedUtc,
+            fullActivityBackup = s.Kind == "FullPreflight",
             sha256 = s.SetsSha256,
             integrityOk = Hash(s.ExerciseSetsJson) == s.SetsSha256 &&
                 Hash(s.ActivityJson) == s.ActivitySha256,
