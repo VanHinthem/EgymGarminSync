@@ -25,11 +25,11 @@ app.MapGet("/api/cache/sessions", async (string? source, SyncDbContext db) =>
     if (source is not ("EGYM" or "Garmin"))
         return Results.BadRequest(new { error = "Specify source=EGYM or source=Garmin." });
     var items = await db.Sessions.AsNoTracking().Where(s => s.Source == source)
-        .OrderByDescending(s => s.StartUtc).Select(s => new {
+        .Select(s => new {
             id = s.SourceId, completedAt = s.StartUtc, exerciseCount = s.ExerciseCount,
             name = s.Name, fetchedUtc = s.FetchedUtc
         }).ToArrayAsync();
-    return Results.Ok(items);
+    return Results.Ok(items.OrderByDescending(x => x.completedAt));
 });
 app.MapGet("/api/cache/status", async (SyncDbContext db) => Results.Ok(new {
     sessions = await db.Sessions.CountAsync(),
