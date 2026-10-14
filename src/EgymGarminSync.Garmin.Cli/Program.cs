@@ -202,6 +202,29 @@ try
         if (exitCode == 0) tokenCache.ClearLoginCooldown();
         return exitCode;
     }
+    if (args.Length == 1 && args[0].Equals("--auth-trace", StringComparison.OrdinalIgnoreCase))
+    {
+        // Explicit diagnostic: one Garmin GET only. Logs do not contain HTTP headers, URLs or token bodies.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var probe = new GarminAuthTraceTokenCache(tokenCache);
+        using var traceHttp = new HttpClient();
+        var traceContext = new GarminConnectContext(traceHttp,
+            new BasicAuthParameters(email, password), new NotImplementedMfaCode(), probe);
+        var traceClient = new GarminConnectClient(traceContext);
+        try
+        {
+            Console.WriteLine("Garmin auth trace: one read-only activity request.");
+            var activities = await traceClient.GetActivities(0, 1);
+            Console.WriteLine($"SUCCESS: activities={activities.Length}; elapsedMs={watch.ElapsedMilliseconds}; cacheEvents={probe.EventSummary}");
+            tokenCache.ClearLoginCooldown();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAILED: type={ex.GetType().Name}; elapsedMs={watch.ElapsedMilliseconds}; cacheEvents={probe.EventSummary}");
+            return 1;
+        }
+    }
     if (args.Length == 1 && args[0].Equals("--matching-times-10", StringComparison.OrdinalIgnoreCase))
     {
         Console.WriteLine("Read-only Garmin discovery: requesting at most 10 recent activities.");
