@@ -25,7 +25,7 @@ internal static class GarminEditPreview
         {
             var cache=new WindowsGarminTokenCache(email);
             if (cache.IsInLoginCooldown(out _)) return Results.Problem("Garmin login cooldown.",statusCode:429);
-            using var http=new HttpClient();
+            using var http = new HttpClient(GarminIpv4Transport.Create());
             var context=new GarminConnectContext(http,new BasicAuthParameters(email,password),
                 new NotImplementedMfaCode(),cache);
             var client=new GarminConnectClient(context);
