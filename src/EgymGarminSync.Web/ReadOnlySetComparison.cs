@@ -53,7 +53,7 @@ internal static class ReadOnlySetComparison
             var client = new GarminConnectClient(context);
             var activities = await client.GetActivities(0, 100);
             if (!activities.Any(a => a.ActivityId == garminId &&
-                a.ActivityName is "EGYM Positief" or "EGYM Negatief"))
+                (a.ActivityName is "EGYM Positief" or "EGYM Negatief")))
                 return Results.BadRequest(new { error = "Selected Garmin activity is not a recent EGYM workout." });
             var live = await context.GetAndDeserialize<JsonElement>(
                 $"/activity-service/activity/{garminId}/exerciseSets");
