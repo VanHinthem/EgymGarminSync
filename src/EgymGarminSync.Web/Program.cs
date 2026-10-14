@@ -15,7 +15,20 @@ Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 builder.Services.AddDbContext<SyncDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
-    await scope.ServiceProvider.GetRequiredService<SyncDbContext>().Database.EnsureCreatedAsync();
+{
+    var database = scope.ServiceProvider.GetRequiredService<SyncDbContext>();
+    await database.Database.EnsureCreatedAsync();
+    // Existing SQLite files predate the new sets cache. Add this table without
+    // dropping or recreating the user's previously imported session data.
+    await database.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "GarminSets" (
+            "GarminActivityId" INTEGER NOT NULL PRIMARY KEY,
+            "ExerciseSetsJson" TEXT NOT NULL,
+            "Sha256" TEXT NOT NULL,
+            "FetchedUtc" TEXT NOT NULL
+        )
+        """);
+}
 app.UseCors("LocalUi");
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", writeEnabled = false, database = "SQLite" }));
@@ -37,7 +50,8 @@ app.MapGet("/api/cache/status", async (SyncDbContext db) => Results.Ok(new {
     egym = await db.Sessions.CountAsync(s => s.Source == "EGYM"),
     garmin = await db.Sessions.CountAsync(s => s.Source == "Garmin"),
     checkpoints = await db.Checkpoints.AsNoTracking().ToArrayAsync(),
-    snapshots = await db.GarminSnapshots.CountAsync()
+    snapshots = await db.GarminSnapshots.CountAsync(),
+    cachedGarminSets = await db.GarminSets.CountAsync()
 }));
 
 app.MapGet("/api/egym/sessions", async (int? days) =>
@@ -85,6 +99,8 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
 });
 
 app.MapGet("/api/garmin/sessions", GarminReadOnlySessions.GetAsync);
+app.MapPost("/api/cache/garmin-sets/import", GarminSetsImport.ImportAsync);
+app.MapGet("/api/cache/garmin-sets/{activityId:long}", GarminSetsImport.GetCachedAsync);
 app.MapGet("/api/compare", ReadOnlySetComparison.GetAsync);
 app.MapPost("/api/sync/preview", GarminEditPreview.PreviewAsync);
 
