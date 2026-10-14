@@ -23,6 +23,32 @@ if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
     return 1;
 }
 
+if (args.Length == 1 && args[0].Equals("--token-cache-status", StringComparison.OrdinalIgnoreCase))
+{
+    // Offline-only: no HttpClient, GarminConnectContext, or Garmin API calls.
+    try
+    {
+        var cache = new WindowsGarminTokenCache(email);
+        var cooldown = cache.IsInLoginCooldown(out var retryAfterUtc);
+        var oauth1 = await cache.GetOAuth1Token(CancellationToken.None);
+        var oauth2 = await cache.GetOAuth2Token(CancellationToken.None);
+        Console.WriteLine("Garmin local token cache (offline, read-only):");
+        Console.WriteLine($"OAuth1 present: {oauth1 is not null}");
+        Console.WriteLine($"OAuth2 usable (>60s remaining): {oauth2 is not null}");
+        Console.WriteLine($"Login cooldown active: {cooldown}");
+        if (cooldown)
+            Console.WriteLine($"Retry after (local time): {retryAfterUtc.ToLocalTime():yyyy-MM-dd HH:mm}");
+        Console.WriteLine("Note: OAuth2 unusable may mean absent, expired or within the 60-second safety margin.");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        // Avoid printing exception messages, which can contain private paths or upstream data.
+        Console.Error.WriteLine($"Offline token-cache inspection failed: {ex.GetType().Name}.");
+        return 1;
+    }
+}
+
 WindowsGarminTokenCache? tokenCache = null;
 try
 {
