@@ -13,7 +13,7 @@ namespace EgymGarminSync.Web;
 /// <summary>Initial server-side imports. Checkpoints mean completed imports, not API modification cursors.</summary>
 internal static class InitialCacheImport
 {
-    public static async Task<IResult> ImportAsync(SyncDbContext db)
+    public static async Task<IResult> ImportAsync(SyncDbContext db, bool incremental = false)
     {
         if (!OperatingSystem.IsWindows())
             return Results.Problem("Garmin import currently requires Windows DPAPI.", statusCode: 501);
@@ -24,6 +24,12 @@ internal static class InitialCacheImport
         if (new[] { ee,ep,ge,gp }.Any(string.IsNullOrWhiteSpace))
             return Results.Problem("Configure both API accounts in the server process.",statusCode:503);
 
+        var previous = await db.Checkpoints.AsNoTracking().SingleOrDefaultAsync(x => x.Source == "EGYM");
+        if (incremental && previous is null)
+            return Results.Conflict(new { error = "Initial import required before rolling sync." });
+        var since = incremental
+            ? DateOnly.FromDateTime(previous!.LastSuccessfulUtc.UtcDateTime.AddDays(-7))
+            : DateOnly.FromDateTime(DateTime.Today.AddDays(-180));
         // Do not advance either checkpoint until the complete source fetch succeeds.
         List<JsonElement> egymWorkouts;
         (long Id,string Name,DateTime Utc)[] garminActivities;
@@ -31,7 +37,7 @@ internal static class InitialCacheImport
         {
             using var egym=new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"),ee!,ep!);
             var today=DateOnly.FromDateTime(DateTime.Today);
-            egymWorkouts=(await egym.GetWorkoutsAsync(today.AddDays(-180),today)).ToList();
+            egymWorkouts=(await egym.GetWorkoutsAsync(since,today)).ToList();
             var cache=new WindowsGarminTokenCache(ge!);
             if(cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.",statusCode:429);
@@ -51,16 +57,23 @@ internal static class InitialCacheImport
         }
 
         var now=DateTimeOffset.UtcNow;
+        if (incremental)
+        {
+            var cutoff = since.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            garminActivities = garminActivities.Where(a => a.Utc >= cutoff).ToArray();
+        }
         var items=new List<CachedSession>();
         foreach(var workout in egymWorkouts)
         {
             var json=workout.GetRawText();
             var hash=Hash(json);
-            // Until an upstream immutable workout identifier is verified, use a content
-            // identity. This is deliberately not presented as reliable incremental upsert.
+            var completed=CompletedUtc(workout);
+            if (completed is null)
+                return Results.Conflict(new { error="EGYM completion timestamp missing or ambiguous." });
             items.Add(new CachedSession {
-                Source="EGYM", SourceId=hash, Sha256=hash, SourceJson=json,
-                FetchedUtc=now, StartUtc=CompletedUtc(workout),
+                Source="EGYM", SourceId="completed:"+completed.Value.ToUnixTimeMilliseconds(),
+                Sha256=hash, SourceJson=json,
+                FetchedUtc=now, StartUtc=completed,
                 ExerciseCount=workout.TryGetProperty("exercises",out var exercises)
                     && exercises.ValueKind==JsonValueKind.Array?exercises.GetArrayLength():0
             });
@@ -76,7 +89,14 @@ internal static class InitialCacheImport
             });
         }
 
+        if (items.Where(x=>x.Source=="EGYM").GroupBy(x=>x.SourceId).Any(g=>g.Count()>1))
+            return Results.Conflict(new { error="Duplicate EGYM completion timestamp; refusing to merge." });
         await using var transaction=await db.Database.BeginTransactionAsync();
+        var legacy = await db.Sessions.Where(x=>x.Source=="EGYM" &&
+            !x.SourceId.StartsWith("completed:")).ToListAsync();
+        foreach(var old in legacy)
+            if(items.Count(x=>x.Source=="EGYM" && x.StartUtc==old.StartUtc)==1)
+                db.Sessions.Remove(old);
         foreach(var item in items)
         {
             var existing=await db.Sessions.FindAsync(item.Source,item.SourceId);
@@ -107,8 +127,8 @@ internal static class InitialCacheImport
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
         return Results.Ok(new {egymImported=egymWorkouts.Count,garminImported=garminActivities.Length,
-            lastSuccessfulUtc=now,mode="initial-full-import",
-            limitation="EGYM identities are content hashes; Garmin listing covers 100 latest activities. Incremental sync is not enabled."});
+            lastSuccessfulUtc=now,mode=incremental?"rolling-refresh":"initial-full-import",
+            limitation="EGYM completion time is provisional identity. Garmin discovery covers at most 100 latest activities; older changes may require full import."});
     }
 
     private static string Hash(string json) =>
