@@ -38,15 +38,8 @@ internal static class GarminWriteRehearsal
             var newSets = proposedDoc.RootElement.GetProperty("exerciseSets");
             if (oldSets.GetArrayLength() != newSets.GetArrayLength())
                 throw new InvalidOperationException("Set count changed.");
-            var restored = newSets.GetRawText();
-            // Restoration rehearsal: replace the proposed sets with the original
-            // snapshot sets, proving the exact original set subtree is available.
-            if (!JsonElement.DeepEquals(oldSets, JsonDocument.Parse(restored).RootElement))
-            {
-                // They must differ if at least one real field change was requested.
-                if (edits.All(x => x.Expected == x.Value))
-                    throw new InvalidOperationException("No actual changes.");
-            }
+            // Apply already verifies that reversing all edited fields yields the
+            // original complete JSON tree; the immutable snapshot is the recovery source.
             var changed = edits.Count(x => x.Expected != x.Value);
             if (changed == 0)
                 return Results.BadRequest(new { error = "No actual field changes." });
