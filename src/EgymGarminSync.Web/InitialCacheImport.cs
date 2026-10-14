@@ -33,6 +33,7 @@ internal static class InitialCacheImport
         // Do not advance either checkpoint until the complete source fetch succeeds.
         List<JsonElement> egymWorkouts;
         (long Id,string Name,DateTime Utc)[] garminActivities;
+        var refreshedSets = new List<(long Id, string Raw, string Hash)>();
         try
         {
             using var egym=new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"),ee!,ep!);
@@ -49,6 +50,23 @@ internal static class InitialCacheImport
                 .Where(a=>a.ActivityName is "EGYM Positief" or "EGYM Negatief")
                 .Select(a=>(a.ActivityId,a.ActivityName,DateTime.SpecifyKind(a.StartTimeGmt,DateTimeKind.Utc)))
                 .ToArray();
+            if (incremental)
+            {
+                var cutoff = since.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+                var recent = garminActivities.Where(a => a.Utc >= cutoff).ToArray();
+                // Fetch before opening the transaction. Any failure aborts the entire
+                // rolling sync; existing cache and checkpoints remain untouched.
+                foreach (var activity in recent)
+                {
+                    var response = await context.GetAndDeserialize<JsonElement>(
+                        $"/activity-service/activity/{activity.Id}/exerciseSets");
+                    if (!response.TryGetProperty("exerciseSets", out var sets) ||
+                        sets.ValueKind != JsonValueKind.Array)
+                        throw new InvalidOperationException("Invalid Garmin exercise-set response.");
+                    var raw = response.GetRawText();
+                    refreshedSets.Add((activity.Id, raw, Hash(raw)));
+                }
+            }
             cache.ClearLoginCooldown();
         }
         catch(Exception)
@@ -97,6 +115,36 @@ internal static class InitialCacheImport
         foreach(var old in legacy)
             if(items.Count(x=>x.Source=="EGYM" && x.StartUtc==old.StartUtc)==1)
                 db.Sessions.Remove(old);
+        foreach (var refreshed in refreshedSets)
+        {
+            var current = await db.GarminSets.FindAsync(refreshed.Id);
+            if (current is null)
+            {
+                db.GarminSets.Add(new GarminSetsCache {
+                    GarminActivityId = refreshed.Id, ExerciseSetsJson = refreshed.Raw,
+                    Sha256 = refreshed.Hash, FetchedUtc = now
+                });
+                // The first observed response is not necessarily the historic original.
+                var metadata = items.Single(x => x.Source == "Garmin" &&
+                    x.SourceId == refreshed.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (!await db.GarminSnapshots.AnyAsync(x =>
+                    x.GarminActivityId == refreshed.Id && x.Kind == "FirstObserved"))
+                {
+                    db.GarminSnapshots.Add(new GarminSnapshot {
+                        GarminActivityId = refreshed.Id, CapturedUtc = now, Kind = "FirstObserved",
+                        ActivityJson = metadata.SourceJson, ActivitySha256 = metadata.Sha256,
+                        ExerciseSetsJson = refreshed.Raw, SetsSha256 = refreshed.Hash
+                    });
+                }
+            }
+            else if (current.Sha256 != refreshed.Hash)
+            {
+                current.ExerciseSetsJson = refreshed.Raw;
+                current.Sha256 = refreshed.Hash;
+                current.FetchedUtc = now;
+            }
+            else current.FetchedUtc = now;
+        }
         foreach(var item in items)
         {
             var existing=await db.Sessions.FindAsync(item.Source,item.SourceId);
@@ -128,6 +176,7 @@ internal static class InitialCacheImport
         await transaction.CommitAsync();
         return Results.Ok(new {egymImported=egymWorkouts.Count,garminImported=garminActivities.Length,
             lastSuccessfulUtc=now,mode=incremental?"rolling-refresh":"initial-full-import",
+            garminSetsRefreshed=refreshedSets.Count,
             limitation="EGYM completion time is provisional identity. Garmin discovery covers at most 100 latest activities; older changes may require full import."});
     }
 
