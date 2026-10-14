@@ -7,12 +7,14 @@ internal sealed class SyncDbContext(DbContextOptions<SyncDbContext> options) : D
     public DbSet<CachedSession> Sessions => Set<CachedSession>();
     public DbSet<SyncCheckpoint> Checkpoints => Set<SyncCheckpoint>();
     public DbSet<GarminSnapshot> GarminSnapshots => Set<GarminSnapshot>();
+    public DbSet<GarminSetsCache> GarminSets => Set<GarminSetsCache>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.Entity<CachedSession>().HasKey(x => new { x.Source, x.SourceId });
         builder.Entity<CachedSession>().HasIndex(x => new { x.Source, x.StartUtc });
         builder.Entity<SyncCheckpoint>().HasKey(x => x.Source);
+        builder.Entity<GarminSetsCache>().HasKey(x => x.GarminActivityId);
         builder.Entity<GarminSnapshot>().HasKey(x => x.Id);
         builder.Entity<GarminSnapshot>().HasIndex(x => new { x.GarminActivityId, x.CapturedUtc });
     }
@@ -50,4 +52,12 @@ internal sealed class GarminSnapshot
     public string ExerciseSetsJson { get; set; } = "";
     public string ActivitySha256 { get; set; } = "";
     public string SetsSha256 { get; set; } = "";
+}
+
+internal sealed class GarminSetsCache
+{
+    public long GarminActivityId { get; set; }
+    public string ExerciseSetsJson { get; set; } = "";
+    public string Sha256 { get; set; } = "";
+    public DateTimeOffset FetchedUtc { get; set; }
 }
