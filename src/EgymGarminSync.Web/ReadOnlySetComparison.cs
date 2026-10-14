@@ -30,6 +30,73 @@ internal static class ReadOnlySetComparison
             .Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..].ToLowerInvariant()));
     }
 
+    public static IResult CompareCached(JsonElement workout, JsonElement live)
+    {
+        try
+        {
+            return BuildRows(workout, live);
+        }
+        catch (Exception)
+        {
+            return Results.Problem("Cached exercise data cannot be compared safely.", statusCode: 422);
+        }
+    }
+
+    private static IResult BuildRows(JsonElement workout, JsonElement live)
+    {
+                var rawSets = live.GetProperty("exerciseSets").EnumerateArray()
+                    .Select((item, position) => (item, position))
+                    .Where(x => x.item.TryGetProperty("setType", out var type) &&
+                        type.GetString() == "ACTIVE" && x.item.TryGetProperty("exercises", out var exercises) &&
+                        exercises.ValueKind == JsonValueKind.Array && exercises.GetArrayLength() > 0)
+                    .ToArray();
+    
+                var rows = new List<(int Index, object Value)>();
+                var unmatched = new List<string>();
+                foreach (var exercise in workout.GetProperty("exercises").EnumerateArray())
+                {
+                    var id = exercise.GetProperty("activity").GetProperty("activityId").GetInt64();
+                    if (id == 31) continue; // Cycling never merged into strength sets.
+                    if (!Known.TryGetValue(id, out var mapping))
+                    {
+                        unmatched.Add($"EGYM exercise {id} has no Garmin identity mapping.");
+                        continue;
+                    }
+                    var sourceSets = exercise.GetProperty("sets").EnumerateArray().ToArray();
+                    var targets = rawSets.Where(x =>
+                    {
+                        var first = x.item.GetProperty("exercises")[0];
+                        var category = first.GetProperty("category").GetString();
+                        var name = first.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+                        return category == mapping.Category && name == mapping.Exercise;
+                    }).OrderBy(x => x.position).ToArray();
+                    if (sourceSets.Length != 2 || targets.Length != 2)
+                    {
+                        unmatched.Add($"{mapping.Name}: expected two sets on both sides (EGYM {sourceSets.Length}, Garmin {targets.Length}).");
+                        continue;
+                    }
+                    for (var set = 0; set < 2; set++)
+                    {
+                        var source = sourceSets[set];
+                        var target = targets[set].item;
+                        rows.Add((targets[set].position, new {
+                            id = $"{id}-{targets[set].position}",
+                            exercise = mapping.Name,
+                            egymExercise = mapping.Name,
+                            garminExercise = GarminDisplayName(mapping.Category, mapping.Exercise),
+                            set = set + 1,
+                            egymKg = source.GetProperty("weight").GetDecimal(),
+                            garminKg = target.GetProperty("weight").GetDecimal() / 1000m,
+                            egymReps = source.GetProperty("numberOfReps").GetInt32(),
+                            garminReps = target.GetProperty("repetitionCount").GetInt32(),
+                            garminSetIndex = targets[set].position
+                        }));
+                    }
+                }
+        return Results.Ok(new { rows = rows.OrderBy(r => r.Index).Select(r => r.Value).ToArray(),
+            warnings = unmatched, pairing = "Garmin recorded order, per-exercise set pairing", readOnly = true });
+    }
+
     public static async Task<IResult> GetAsync(string egymId, long garminId)
     {
         if (!egymId.StartsWith("egym-", StringComparison.Ordinal) ||
