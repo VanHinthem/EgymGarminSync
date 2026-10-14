@@ -92,6 +92,13 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
+    if (args.Length == 1 && args[0].Equals("--live-trial-one-repetition", StringComparison.OrdinalIgnoreCase))
+    {
+        // No write occurs without entering the exact activity-specific confirmation.
+        var result = await OneRepetitionLiveTrial.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
     if (args.Length == 1 && args[0].Equals("--metadata-diff-aug31", StringComparison.OrdinalIgnoreCase))
     {
         var result = await Aug31MetadataDiff.RunAsync(context);
