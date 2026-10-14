@@ -50,19 +50,27 @@ internal static class GarminEditPreview
             var edits=request.Edits.Select(x=>new SetFieldEdit(x.SetIndex,x.Field,x.Expected,x.Value)).ToArray();
             var original=live.GetRawText();
             var proposed=GarminSetFieldDraft.Apply(original,edits);
+            // Validate the same complete replace-all shape as the prior weight-only
+            // correction. Nothing is sent to Garmin.
+            var normalized=GarminTrialPayloadNormalizer.Normalize(proposed,request.GarminId);
+            GarminExerciseSetsWriteContract.Validate(normalized,request.GarminId);
             long? snapshotId = null;
             if (prepare)
             {
-                var metadata = await db.Sessions.AsNoTracking().SingleOrDefaultAsync(x =>
-                    x.Source == "Garmin" && x.SourceId == request.GarminId.ToString());
-                if (metadata is null)
-                    return Results.Conflict(new { error = "Garmin session is not in local cache." });
+                // This is the full activity resource, NOT session-list metadata.
+                // Both GETs must succeed before any snapshot is persisted.
+                var fullActivity = await context.GetAndDeserialize<JsonElement>(
+                    $"/activity-service/activity/{request.GarminId}");
+                var fullActivityJson=fullActivity.GetRawText();
+                if (!fullActivity.TryGetProperty("activityId", out var fullId) ||
+                    !fullId.TryGetInt64(out var fullNumber) || fullNumber != request.GarminId)
+                    return Results.Conflict(new {error="Full Garmin activity ID mismatch; no snapshot created."});
                 var snapshot = new GarminSnapshot {
                     GarminActivityId = request.GarminId,
                     CapturedUtc = DateTimeOffset.UtcNow,
-                    Kind = "Preflight",
-                    ActivityJson = metadata.SourceJson,
-                    ActivitySha256 = Hash(metadata.SourceJson),
+                    Kind = "FullPreflight",
+                    ActivityJson = fullActivityJson,
+                    ActivitySha256 = Hash(fullActivityJson),
                     ExerciseSetsJson = original,
                     SetsSha256 = Hash(original)
                 };
@@ -74,6 +82,7 @@ internal static class GarminEditPreview
             return Results.Ok(new {
                 readOnly=true, canWrite=false, activityId=request.GarminId,
                 snapshotId, originalSha256=Hash(original), proposedSha256=Hash(proposed),
+                normalizedPayloadSha256=Hash(normalized), completeActivitySnapshot=prepare,
                 setCount=live.GetProperty("exerciseSets").GetArrayLength(),
                 edits=edits.Select(x=>new {setIndex=x.SetIndex,field=x.Field,from=x.Expected,to=x.Value}).ToArray(),
                 fieldChanges=edits.Count(x=>x.Expected!=x.Value),
