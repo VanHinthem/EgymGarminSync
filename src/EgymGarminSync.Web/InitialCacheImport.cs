@@ -35,7 +35,7 @@ internal static class InitialCacheImport
             var cache=new WindowsGarminTokenCache(ge!);
             if(cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.",statusCode:429);
-            using var http=new HttpClient();
+            using var http = new HttpClient(GarminIpv4Transport.Create());
             var context=new GarminConnectContext(http,
                 new BasicAuthParameters(ge!,gp!),new NotImplementedMfaCode(),cache);
             var client=new GarminConnectClient(context);
