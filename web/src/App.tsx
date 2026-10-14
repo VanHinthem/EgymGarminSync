@@ -67,7 +67,13 @@ function App() {
     try {
       const response=await fetch('/api/egym/sessions?days=180')
       if(!response.ok)throw new Error(`EGYM ophalen niet beschikbaar (HTTP ${response.status}). Controleer de lokale API en serverconfiguratie.`)
-      const data=await response.json() as Session[]
+      const data=(await response.json() as Session[]).sort((a,b)=>{
+        const left=a.completedAt ? Date.parse(a.completedAt) : NaN
+        const right=b.completedAt ? Date.parse(b.completedAt) : NaN
+        const la=Number.isFinite(left)?left:-Infinity
+        const rb=Number.isFinite(right)?right:-Infinity
+        return rb-la
+      })
       const garminResponse=await fetch('/api/garmin/sessions')
       if(!garminResponse.ok) throw new Error(`Garmin ophalen niet beschikbaar (HTTP ${garminResponse.status}). De demomodus blijft actief.`)
       const garminData=await garminResponse.json() as Session[]
