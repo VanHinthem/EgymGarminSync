@@ -38,12 +38,27 @@ app.MapGet("/api/cache/sessions", async (string? source, SyncDbContext db) =>
 {
     if (source is not ("EGYM" or "Garmin"))
         return Results.BadRequest(new { error = "Specify source=EGYM or source=Garmin." });
-    var items = await db.Sessions.AsNoTracking().Where(s => s.Source == source)
-        .Select(s => new {
-            id = s.SourceId, completedAt = s.StartUtc, exerciseCount = s.ExerciseCount,
-            name = s.Name, fetchedUtc = s.FetchedUtc
-        }).ToArrayAsync();
-    return Results.Ok(items.OrderByDescending(x => x.completedAt));
+    var stored = await db.Sessions.AsNoTracking().Where(s => s.Source == source).ToListAsync();
+    var items = stored.Select(s => {
+        string? method = null;
+        if (s.Source == "EGYM")
+        {
+            using var doc = JsonDocument.Parse(s.SourceJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("exercises", out var exercises) && exercises.ValueKind == JsonValueKind.Array)
+            {
+                var methods = exercises.EnumerateArray()
+                    .Where(e => e.TryGetProperty("sets", out var sets) && sets.ValueKind == JsonValueKind.Array)
+                    .SelectMany(e => e.GetProperty("sets").EnumerateArray())
+                    .Where(set => set.TryGetProperty("trainingMethod", out var tm) && tm.ValueKind == JsonValueKind.String)
+                    .Select(set => set.GetProperty("trainingMethod").GetString()).Distinct().ToArray();
+                if (methods.Length == 1) method = methods[0];
+            }
+        }
+        return new { id=s.SourceId, completedAt=s.StartUtc, exerciseCount=s.ExerciseCount,
+            name=s.Name, fetchedUtc=s.FetchedUtc, method };
+    }).OrderByDescending(x => x.completedAt).ToArray();
+    return Results.Ok(items);
 });
 app.MapGet("/api/cache/status", async (SyncDbContext db) => Results.Ok(new {
     sessions = await db.Sessions.CountAsync(),
@@ -102,6 +117,18 @@ app.MapGet("/api/garmin/sessions", GarminReadOnlySessions.GetAsync);
 app.MapPost("/api/cache/garmin-sets/import", GarminSetsImport.ImportAsync);
 app.MapGet("/api/cache/garmin-sets/{activityId:long}", GarminSetsImport.GetCachedAsync);
 app.MapGet("/api/compare", ReadOnlySetComparison.GetAsync);
+app.MapGet("/api/cache/compare", async (string egymId, long garminId, SyncDbContext db) =>
+{
+    var egym = await db.Sessions.AsNoTracking().SingleOrDefaultAsync(s =>
+        s.Source == "EGYM" && s.SourceId == egymId);
+    var garmin = await db.GarminSets.AsNoTracking().SingleOrDefaultAsync(s =>
+        s.GarminActivityId == garminId);
+    if (egym is null || garmin is null)
+        return Results.NotFound(new { error = "Missing cached EGYM workout or Garmin sets." });
+    using var source = JsonDocument.Parse(egym.SourceJson);
+    using var target = JsonDocument.Parse(garmin.ExerciseSetsJson);
+    return ReadOnlySetComparison.CompareCached(source.RootElement, target.RootElement);
+});
 app.MapPost("/api/sync/preview", GarminEditPreview.PreviewAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
