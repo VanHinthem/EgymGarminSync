@@ -19,7 +19,8 @@ using (var scope = app.Services.CreateScope())
 app.UseCors("LocalUi");
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", writeEnabled = false, database = "SQLite" }));
-app.MapPost("/api/cache/import-initial", InitialCacheImport.ImportAsync);
+app.MapPost("/api/cache/import-initial", (SyncDbContext db) => InitialCacheImport.ImportAsync(db));
+app.MapPost("/api/cache/sync", (SyncDbContext db) => InitialCacheImport.ImportAsync(db, incremental: true));
 app.MapGet("/api/cache/sessions", async (string? source, SyncDbContext db) =>
 {
     if (source is not ("EGYM" or "Garmin"))
