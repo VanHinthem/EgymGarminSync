@@ -171,6 +171,24 @@ try
         if (exitCode == 0) tokenCache.ClearLoginCooldown();
         return exitCode;
     }
+    if (args.Length == 1 && args[0].Equals("--matching-times-10", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("Read-only Garmin discovery: requesting at most 10 recent activities.");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var activities = await client.GetActivities(0, 10);
+            Console.WriteLine($"SUCCESS: received {activities.Length} activities in {watch.ElapsedMilliseconds} ms.");
+            tokenCache.ClearLoginCooldown();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            // Exception messages can contain private URLs or account data.
+            Console.Error.WriteLine($"FAILED: {ex.GetType().Name} after {watch.ElapsedMilliseconds} ms.");
+            return 1;
+        }
+    }
     if (args.Contains("--matching-times", StringComparer.OrdinalIgnoreCase))
     {
         Console.WriteLine("Read-only Garmin EGYM activity timestamps (GMT from Garmin):");
