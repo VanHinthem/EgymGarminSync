@@ -13,10 +13,11 @@ internal static class GarminRestorePlan
     public static async Task<IResult> GetAsync(long activityId, SyncDbContext db)
     {
         if (activityId <= 0) return Results.BadRequest();
-        var snapshots = await db.GarminSnapshots.AsNoTracking()
+        var snapshots = (await db.GarminSnapshots.AsNoTracking()
             .Where(s => s.GarminActivityId == activityId)
+            .ToListAsync())
             .OrderByDescending(s => s.CapturedUtc)
-            .ToListAsync();
+            .ToList();
         if (snapshots.Count == 0) return Results.NotFound();
         var cached = await db.GarminSets.AsNoTracking()
             .SingleOrDefaultAsync(s => s.GarminActivityId == activityId);
