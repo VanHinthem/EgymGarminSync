@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Check, CircleAlert, CloudDownload, Dumbbell, Link2, RefreshCw, Save, Undo2 } from 'lucide-react'
+import { ArrowRight, CircleAlert, CloudDownload, Dumbbell, Link2, RefreshCw, Save, Undo2 } from 'lucide-react'
 import './style.css'
 
 type Session = { id: string; completedAt: string | null; exerciseCount: number }
@@ -38,7 +38,6 @@ function App() {
   const [error,setError] = useState('')
   const [loading,setLoading] = useState(false)
   const [review,setReview] = useState(false)
-  const [search,setSearch] = useState('')
   const current = egym.find(s=>s.id===selectedEgym)
   const candidate = demoGarmin.find(g=>g.completedAt?.slice(0,10)===current?.completedAt?.slice(0,10))
   const changeList = useMemo(()=>exampleRows.flatMap(row=>{
@@ -69,7 +68,7 @@ function App() {
     {error && <div className="warning"><CircleAlert size={17}/>{error}</div>}
     {mode==='demo'&&<div className="notice"><CircleAlert size={17}/> Dit is een interactieve demo met voorbeeldgegevens. Live Garmin-data en synchronisatie zijn nog niet aangesloten.</div>}
     <section className="sessionGrid">
-      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><input className="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Filter op datum..."/><div className="sessionList">{egym.filter(s=>displayDate(s.completedAt).toLowerCase().includes(search.toLowerCase())).map(s=><button key={s.id} className={'session '+(selectedEgym===s.id?'chosen':'')} onClick={()=>pickEgym(s.id)}><span><strong>{displayDate(s.completedAt)}</strong><small>{s.exerciseCount} oefeningen</small></span>{selectedEgym===s.id&&<Check size={18}/>}</button>)}</div></article>
+      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen</option>)}</select></article>
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':'Nog geen live Garmin-gegevens'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false)}} disabled={mode!=='demo'}><option value="">Geen training geselecteerd</option>{demoGarmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Live matching wordt aangesloten op de bestaande engine.</p></article>
     </section>
     <section className="comparison panel"><div className="compareHeader"><div><div className="eyebrow">VERGELIJKING</div><h2>Oefeningen en sets</h2><p>Neem gewicht en herhalingen afzonderlijk over van EGYM naar Garmin.</p></div><span className="count">{changeList.length} voorbereid</span></div>
