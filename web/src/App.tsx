@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, CircleAlert, CloudDownload, Dumbbell, Link2, RefreshCw, Save, Undo2 } from 'lucide-react'
 import './style.css'
 
@@ -39,6 +39,10 @@ function App() {
   const [error,setError] = useState('')
   const [loading,setLoading] = useState(false)
   const [review,setReview] = useState(false)
+  const [liveRows,setLiveRows] = useState<SetRow[]>([])
+  const [warnings,setWarnings] = useState<string[]>([])
+  const [setsLoading,setSetsLoading] = useState(false)
+  const [setsError,setSetsError] = useState('')
   const current = egym.find(s=>s.id===selectedEgym)
   function propose(source: Session | undefined, targets: Session[]) {
     if (!source?.completedAt || !source.method) return ''
@@ -53,13 +57,25 @@ function App() {
     return nearby.length===1 && nearby[0].name===variant ? nearby[0].id : ''
   }
   const candidate = mode==='demo' ? demoGarmin.find(g=>g.completedAt?.slice(0,10)===current?.completedAt?.slice(0,10)) : garmin.find(g=>g.id===propose(current,garmin))
-  const changeList = useMemo(()=>exampleRows.flatMap(row=>{
+  const displayedRows = mode==='demo' ? exampleRows : liveRows
+  useEffect(()=>{
+    if(mode!=='live'||!selectedEgym||!selectedGarmin){setLiveRows([]);setWarnings([]);setSetsError('');return}
+    const abort=new AbortController()
+    setSetsLoading(true);setLiveRows([]);setWarnings([]);setSetsError('')
+    fetch(`/api/compare?egymId=${encodeURIComponent(selectedEgym)}&garminId=${encodeURIComponent(selectedGarmin)}`,{signal:abort.signal})
+      .then(async response=>{if(!response.ok)throw new Error(`Setvergelijking niet beschikbaar (HTTP ${response.status}).`);return response.json()})
+      .then((data:{rows:SetRow[],warnings:string[]})=>{if(!abort.signal.aborted){setLiveRows(data.rows);setWarnings(data.warnings??[])}})
+      .catch(err=>{if(!abort.signal.aborted)setSetsError(err instanceof Error?err.message:'Onbekende fout')})
+      .finally(()=>{if(!abort.signal.aborted)setSetsLoading(false)})
+    return ()=>abort.abort()
+  },[mode,selectedEgym,selectedGarmin])
+  const changeList = useMemo(()=>displayedRows.flatMap(row=>{
     const state = draft[row.id] ?? {}
     const result: string[]=[]
     if (state.kg!==undefined && state.kg!==row.garminKg) result.push(`${row.exercise} set ${row.set}: ${row.garminKg} → ${state.kg} kg`)
     if (state.reps!==undefined && state.reps!==row.garminReps) result.push(`${row.exercise} set ${row.set}: ${row.garminReps} → ${state.reps} reps`)
     return result
-  }),[draft])
+  }),[draft,displayedRows])
   function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false)}
   function pickEgym(id:string){setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
   async function loadEgym(){
@@ -94,9 +110,12 @@ function App() {
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false)}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
     </section>
     <section className="comparison panel"><div className="compareHeader"><div><div className="eyebrow">VERGELIJKING</div><h2>Oefeningen en sets</h2><p>Neem gewicht en herhalingen afzonderlijk over van EGYM naar Garmin.</p></div><span className="count">{changeList.length} voorbereid</span></div>
-      {mode==='demo'&&selectedGarmin?<><div className="tableScroll"><table><thead><tr><th>Oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th></tr></thead><tbody>{exampleRows.map(row=><tr key={row.id}><td><strong>{row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div>{row.egymKg} kg</div><div>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td></tr>)}</tbody></table></div>
-      <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(exampleRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false)}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false)}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>setReview(true)}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
-      {review&&<div className="review"><h3>Voorbereide wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}<button disabled className="primary"><Save size={16}/> Opslaan in Garmin (nog niet beschikbaar)</button><p>Dit is een demo. Er wordt niets naar Garmin gestuurd.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Vergelijking met echte sets volgt</strong><p>EGYM- en Garmin-sessies kunnen nu worden geselecteerd. Het uitlezen en vergelijken van afzonderlijke sets volgt; opslaan blijft uitgeschakeld.</p></div>}
+      {setsError&&<div className="warning">{setsError}</div>}
+      {warnings.length>0&&<div className="notice">{warnings.join(' · ')}</div>}
+      {setsLoading&&<div className="empty">Oefeningen laden...</div>}
+      {selectedGarmin&&!setsLoading&&displayedRows.length>0?<><div className="tableScroll"><table><thead><tr><th>Oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th></tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}><td><strong>{row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div>{row.egymKg} kg</div><div>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td></tr>)}</tbody></table></div>
+      <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false)}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false)}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>setReview(true)}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
+      {review&&<div className="review"><h3>Voorbereide wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}<button disabled className="primary"><Save size={16}/> Opslaan in Garmin (nog niet beschikbaar)</button><p>Alle wijzigingen zijn alleen lokaal voorbereid. Er wordt niets naar Garmin gestuurd.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
     </section>
   </main>
 }
