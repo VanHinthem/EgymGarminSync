@@ -18,3 +18,11 @@ Important limitations: **This is not incremental synchronization yet.** The chec
 `Database.EnsureCreated` supports first local development startup only; add migrations before long-term schema evolution. SQLite is local and contains personal fitness metadata; don't commit the DB, expose it to the network or persist credentials in it.
 
 The existing web session dropdowns and comparison still use the original live read paths. Garmin writing remains disabled.
+
+
+## Rolling sync prototype (phase 2)
+`POST /api/cache/sync` re-reads EGYM workouts from 7 days before the previous successful EGYM checkpoint through today, and Garmin's latest 100 activities, then retains activities within the same window. All updates and checkpoints are committed in a single SQLite transaction; Garmin writes remain disabled. `POST /api/cache/import-initial` remains available for a 180-day full refresh.
+
+EGYM records are now keyed provisionally by normalized UTC completion timestamp rather than a hash of their raw JSON, so changes to exercise details do not automatically create a different key. Duplicate completion timestamps in the same import abort the operation. Legacy hash-keyed rows that correspond unambiguously to a fetched timestamp are removed during import. This **is not a verified stable upstream ID**: a revised completion timestamp, missing timezone or older changes can still require reconciliation. Do not treat it as a definitive identity for future Garmin writes.
+
+Garmin still exposes only list metadata in the cache. The first page of 100 activities is **not guaranteed** to cover the seven-day window for high-volume accounts, and neither API currently provides a proven modified-since feed. Treat this endpoint as a rolling refresh prototype, not complete incremental synchronization. Full set-data caching, pagination verification and immutable pre-write snapshots remain separate future work.
