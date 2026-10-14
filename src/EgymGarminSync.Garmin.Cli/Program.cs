@@ -6,8 +6,8 @@ using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
 
-if (args.Length == 1 && args[0].Equals("--offline-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
-    return await OneRepetitionRestore.RunAsync(null, execute: false);
+if (args.Length == 2 && args[0].Equals("--offline-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    return await OneRepetitionRestore.RunAsync(null, execute: false, args[1]);
 
 if (args.Contains("--offline-preflight-aug31", StringComparer.OrdinalIgnoreCase))
     return await OfflineSnapshotPreflight.RunAsync();
@@ -95,9 +95,9 @@ try
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
-    if (args.Length == 1 && args[0].Equals("--live-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    if (args.Length == 2 && args[0].Equals("--live-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
     {
-        var result = await OneRepetitionRestore.RunAsync(context, execute: true);
+        var result = await OneRepetitionRestore.RunAsync(context, execute: true, args[1]);
         if (result == 0) tokenCache.ClearLoginCooldown();
         return result;
     }
