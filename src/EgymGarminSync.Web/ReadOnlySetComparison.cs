@@ -64,7 +64,7 @@ internal static class ReadOnlySetComparison
                     exercises.ValueKind == JsonValueKind.Array && exercises.GetArrayLength() > 0)
                 .ToArray();
 
-            var rows = new List<object>();
+            var rows = new List<(int Index, object Value)>();
             var unmatched = new List<string>();
             foreach (var exercise in workout.GetProperty("exercises").EnumerateArray())
             {
@@ -92,20 +92,22 @@ internal static class ReadOnlySetComparison
                 {
                     var source = sourceSets[set];
                     var target = targets[set].item;
-                    rows.Add(new {
+                    rows.Add((targets[set].position, new {
                         id = $"{id}-{targets[set].position}",
                         exercise = mapping.Name,
+                        egymExercise = mapping.Name,
+                        garminExercise = mapping.Exercise ?? mapping.Category,
                         set = set + 1,
                         egymKg = source.GetProperty("weight").GetDecimal(),
                         garminKg = target.GetProperty("weight").GetDecimal() / 1000m,
                         egymReps = source.GetProperty("numberOfReps").GetInt32(),
                         garminReps = target.GetProperty("repetitionCount").GetInt32(),
                         garminSetIndex = targets[set].position
-                    });
+                    }));
                 }
             }
             cache.ClearLoginCooldown();
-            return Results.Ok(new { rows, warnings = unmatched, pairing = "Physical per-exercise set order; review before any future write.", readOnly = true });
+            return Results.Ok(new { rows = rows.OrderBy(r => r.Index).Select(r => r.Value).ToArray(), warnings = unmatched, pairing = "Chronological Garmin set order, with per-exercise set pairing; review before any future write.", readOnly = true });
         }
         catch (Exception)
         {
