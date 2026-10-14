@@ -38,7 +38,14 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
             }
             var exerciseCount = w.TryGetProperty("exercises", out var exercises) &&
                 exercises.ValueKind == JsonValueKind.Array ? exercises.GetArrayLength() : 0;
-            return new { id = $"egym-{i}", completedAt = completed, exerciseCount };
+            var methods = w.GetProperty("exercises").EnumerateArray()
+                .Where(e => e.TryGetProperty("sets", out var sets) && sets.ValueKind == JsonValueKind.Array)
+                .SelectMany(e => e.GetProperty("sets").EnumerateArray())
+                .Where(set => set.TryGetProperty("trainingMethod", out var method) && method.ValueKind == JsonValueKind.String)
+                .Select(set => set.GetProperty("trainingMethod").GetString())
+                .Where(method => !string.IsNullOrWhiteSpace(method)).Distinct().ToArray();
+            var methodName = methods.Length == 1 ? methods[0] : null;
+            return new { id = $"egym-{i}", completedAt = completed, exerciseCount, method = methodName };
         }).ToArray();
         return Results.Ok(sessions);
     }
