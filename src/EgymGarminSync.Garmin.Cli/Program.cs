@@ -207,7 +207,7 @@ try
         // Explicit diagnostic: one Garmin GET only. Logs do not contain HTTP headers, URLs or token bodies.
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var probe = new GarminAuthTraceTokenCache(tokenCache);
-        using var traceHttp = new HttpClient();
+        using var traceHttp = new HttpClient(new GarminHttpTraceHandler(new HttpClientHandler()));
         var traceContext = new GarminConnectContext(traceHttp,
             new BasicAuthParameters(email, password), new NotImplementedMfaCode(), probe);
         var traceClient = new GarminConnectClient(traceContext);
