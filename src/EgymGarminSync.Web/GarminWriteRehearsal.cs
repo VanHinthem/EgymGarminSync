@@ -44,6 +44,10 @@ internal static class GarminWriteRehearsal
             // weight correction. This is still strictly offline.
             var normalized = GarminTrialPayloadNormalizer.Normalize(proposed, snapshot.GarminActivityId);
             GarminExerciseSetsWriteContract.Validate(normalized, snapshot.GarminActivityId);
+            // Independently reconstruct a recovery payload from the immutable snapshot.
+            var recoveryPayload = GarminTrialPayloadNormalizer.Normalize(
+                snapshot.ExerciseSetsJson, snapshot.GarminActivityId);
+            GarminExerciseSetsWriteContract.Validate(recoveryPayload, snapshot.GarminActivityId);
             var changed = edits.Count(x => x.Expected != x.Value);
             if (changed == 0)
                 return Results.BadRequest(new { error = "No actual field changes." });
@@ -56,6 +60,8 @@ internal static class GarminWriteRehearsal
                 originalSha256 = snapshot.SetsSha256,
                 proposedSha256 = Hash(proposed),
                 recoverySourceSha256 = snapshot.SetsSha256,
+                restorePayloadContractValid = true,
+                restorePayloadSha256 = Hash(recoveryPayload),
                 recoverySourceAvailable = true,
                 fullActivityBackup = snapshot.Kind == "FullPreflight",
                 message = "Offline full replace-all payload validated. Repetition writes are not proven against Garmin. No Garmin GET, PUT, or restore performed."
