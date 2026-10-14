@@ -41,6 +41,7 @@ function App() {
   const [lastSync,setLastSync] = useState<string | null>(null)
   const [review,setReview] = useState(false)
   const [previewResult,setPreviewResult] = useState('')
+  const [preparedBackupId,setPreparedBackupId] = useState<number|null>(null)
   const [liveRows,setLiveRows] = useState<SetRow[]>([])
   const [warnings,setWarnings] = useState<string[]>([])
   const [setsLoading,setSetsLoading] = useState(false)
@@ -78,11 +79,9 @@ function App() {
     if (state.reps!==undefined && state.reps!==row.garminReps) result.push(`${row.exercise} set ${row.set}: ${row.garminReps} → ${state.reps} reps`)
     return result
   }),[draft,displayedRows])
-  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false)}
-  async function checkServerPreview(prepare = false){
-    setReview(true)
-    if(mode==='demo')return
-    const edits=displayedRows.flatMap(r=>{
+  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false);setPreparedBackupId(null)}
+  function selectedEdits(){
+    return displayedRows.flatMap(r=>{
       const change=draft[r.id]??{}
       const values=[] as {setIndex:number,field:string,expected:number,value:number}[]
       if(r.garminSetIndex===undefined)return values
@@ -90,16 +89,33 @@ function App() {
       if(change.reps!==undefined&&change.reps!==r.garminReps)values.push({setIndex:r.garminSetIndex,field:'repetitionCount',expected:r.garminReps,value:change.reps})
       return values
     })
+  }
+  async function checkServerPreview(prepare = false){
+    setReview(true)
+    if(mode==='demo')return
+    const edits=selectedEdits()
     try{
       const response=await fetch(prepare?'/api/sync/prepare':'/api/sync/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({garminId:Number(selectedGarmin),edits})})
       if(!response.ok){setPreviewResult('Servercontrole geweigerd: laad de sessies opnieuw voordat je verdergaat.');return}
       const result=await response.json() as {snapshotId?:number|null}
+      if(prepare)setPreparedBackupId(result.snapshotId??null)
       setPreviewResult(prepare
         ? `Preflight-backup #${result.snapshotId} opgeslagen in SQLite. Er is niets naar Garmin geschreven.`
         : 'Servercontrole geslaagd: actuele Garmin-waarden komen overeen. Er is niets opgeslagen.')
     }catch{setPreviewResult('Servercontrole niet bereikbaar. Er is niets opgeslagen.')}
   }
-  function pickEgym(id:string){setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
+  async function checkSavePlan(){
+    if(mode!=='live'||preparedBackupId===null)return
+    try{
+      const response=await fetch('/api/sync/save-plan',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({garminId:Number(selectedGarmin),snapshotId:preparedBackupId,edits:selectedEdits()})})
+      if(!response.ok){setPreviewResult('Opslagplan geweigerd: wijzigingen of backup niet geldig.');return}
+      const result=await response.json() as {changes:unknown[],backupId:number}
+      setPreviewResult(`Generiek opslagplan geldig: ${result.changes.length} velden, backup #${result.backupId}. Garmin blijft ongewijzigd.`)
+    }catch{setPreviewResult('Opslagplan niet bereikbaar. Niets opgeslagen.')}
+  }
+  function pickEgym(id:string){setPreparedBackupId(null);setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
   async function readCache(){
     const [eResponse,gResponse,statusResponse]=await Promise.all([
       fetch('/api/cache/sessions?source=EGYM'),
@@ -115,7 +131,7 @@ function App() {
     setSelectedEgym(e[0]?.id??'')
     setSelectedGarmin(propose(e[0],g))
     setLastSync(status.checkpoints.find(c=>c.source==='EGYM')?.lastSuccessfulUtc??null)
-    setDraft({});setReview(false)
+    setDraft({});setReview(false);setPreparedBackupId(null)
   }
   useEffect(()=>{readCache().catch(e=>setError(e instanceof Error?e.message:'Kan lokale database niet lezen'))},[])
   async function loadEgym(){
@@ -146,7 +162,7 @@ function App() {
       {setsLoading&&<div className="empty">Oefeningen laden...</div>}
       {selectedGarmin&&!setsLoading&&displayedRows.length>0?<><div className="tableScroll"><table><thead><tr><th>EGYM-oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th><th>Garmin-oefening</th></tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}><td><strong>{row.egymExercise??row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div>{row.egymKg} kg</div><div>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td><td><strong>{row.garminExercise??row.exercise}</strong><small>Set {row.set}</small></td></tr>)}</tbody></table></div>
       <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false)}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false)}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>void checkServerPreview()}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
-      {review&&<div className="review"><h3>Voorbereide wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&<button className="secondary" onClick={()=>void checkServerPreview(true)}>Preflight-backup maken</button>}<button disabled className="primary"><Save size={16}/> Opslaan in Garmin (nog niet beschikbaar)</button><p>Alle wijzigingen zijn alleen lokaal voorbereid. Er wordt niets naar Garmin gestuurd.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
+      {review&&<div className="review"><h3>Voorbereide wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&<button className="secondary" onClick={()=>void checkServerPreview(true)}>Preflight-backup maken</button>}{mode==='live'&&preparedBackupId!==null&&changeList.length>0&&<button className="secondary" onClick={()=>void checkSavePlan()}>Opslagplan controleren (zonder schrijven)</button>}<button disabled className="primary"><Save size={16}/> Opslaan in Garmin (nog niet beschikbaar)</button><p>Alle wijzigingen zijn alleen lokaal voorbereid. Er wordt niets naar Garmin gestuurd.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
     </section>
   </main>
 }
