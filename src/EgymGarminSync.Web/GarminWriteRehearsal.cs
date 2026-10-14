@@ -40,6 +40,10 @@ internal static class GarminWriteRehearsal
                 throw new InvalidOperationException("Set count changed.");
             // Apply already verifies that reversing all edited fields yields the
             // original complete JSON tree; the immutable snapshot is the recovery source.
+            // Match the full replace-all format used by the previously verified
+            // weight correction. This is still strictly offline.
+            var normalized = GarminTrialPayloadNormalizer.Normalize(proposed, snapshot.GarminActivityId);
+            GarminExerciseSetsWriteContract.Validate(normalized, snapshot.GarminActivityId);
             var changed = edits.Count(x => x.Expected != x.Value);
             if (changed == 0)
                 return Results.BadRequest(new { error = "No actual field changes." });
@@ -47,12 +51,13 @@ internal static class GarminWriteRehearsal
                 readOnly = true, canWrite = false, canRestore = false,
                 snapshotId = snapshot.Id, activityId = snapshot.GarminActivityId,
                 integrityOk = true, setCount = oldSets.GetArrayLength(),
+                replaceAllContractValid = true, normalizedPayloadSha256 = Hash(normalized),
                 fieldChanges = changed,
                 originalSha256 = snapshot.SetsSha256,
                 proposedSha256 = Hash(proposed),
                 recoverySourceSha256 = snapshot.SetsSha256,
                 recoverySourceAvailable = true,
-                message = "Offline edit and recovery source validated. No Garmin GET, PUT, or restore performed."
+                message = "Offline full replace-all payload validated. Repetition writes are not proven against Garmin. No Garmin GET, PUT, or restore performed."
             });
         }
         catch (InvalidOperationException)
