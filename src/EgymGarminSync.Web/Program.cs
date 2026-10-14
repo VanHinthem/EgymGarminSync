@@ -1,4 +1,6 @@
 using EgymGarminSync.Egym;
+using EgymGarminSync.Web;
+using System.Globalization;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,7 +26,16 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
         var workouts = await client.GetWorkoutsAsync(today.AddDays(-period), today);
         var sessions = workouts.Select((w, i) =>
         {
-            string? completed = w.TryGetProperty("completedAt", out var dt) ? dt.ToString() : null;
+            string? completed = null;
+            if (w.TryGetProperty("completedAt", out var dt) &&
+                w.TryGetProperty("timezone", out var tz) && tz.ValueKind == JsonValueKind.String)
+            {
+                var zone = TimeZoneInfo.FindSystemTimeZoneById(tz.GetString()!);
+                var local = DateTime.SpecifyKind(DateTime.Parse(dt.GetString()!,
+                    CultureInfo.InvariantCulture, DateTimeStyles.None), DateTimeKind.Unspecified);
+                if (!zone.IsAmbiguousTime(local) && !zone.IsInvalidTime(local))
+                    completed = TimeZoneInfo.ConvertTimeToUtc(local, zone).ToString("O");
+            }
             var exerciseCount = w.TryGetProperty("exercises", out var exercises) &&
                 exercises.ValueKind == JsonValueKind.Array ? exercises.GetArrayLength() : 0;
             return new { id = $"egym-{i}", completedAt = completed, exerciseCount };
@@ -38,9 +49,7 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
     }
 });
 
-app.MapGet("/api/garmin/sessions", () => Results.Problem(
-    "Garmin session reading is not connected to the web host yet. CLI token cache remains separate.",
-    statusCode: 501));
+app.MapGet("/api/garmin/sessions", GarminReadOnlySessions.GetAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
     "Garmin writes are disabled in this first web slice.", statusCode: 501));
