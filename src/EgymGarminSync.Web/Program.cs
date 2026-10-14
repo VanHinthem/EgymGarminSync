@@ -1,6 +1,7 @@
 using EgymGarminSync.Egym;
 using EgymGarminSync.Web;
 using System.Globalization;
+
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
