@@ -676,6 +676,99 @@ internal static class GarminUncertainIsolationTest
                         throw new InvalidOperationException("Factory allowed a duplicate PUT.");
                     Console.WriteLine("PASS: guarded write context factory allows one SDK PUT; repeat blocked.");
                 }
+                foreach(var (scenario,index) in new[] {"Verified","Mismatch","Timeout"}
+                    .Select((value,i)=>(value,i)))
+                {
+                    var id=activityId+25000+index;
+                    var originalActivity=JsonSerializer.Serialize(new {activityId=id});
+                    var originalSets=BuildSyntheticSets(id);
+                    var candidate=GarminSetFieldDraft.Apply(originalSets,
+                        new[] {new SetFieldEdit(2,"repetitionCount",15,14)});
+                    var outgoing=GarminTrialPayloadNormalizer.Normalize(candidate,id);
+                    var snapshot=new GarminSnapshot {
+                        GarminActivityId=id,Kind="WritePreparation",
+                        ActivityJson=originalActivity,ActivitySha256=Hash(originalActivity),
+                        ExerciseSetsJson=originalSets,SetsSha256=Hash(originalSets),
+                        CapturedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.GarminSnapshots.Add(snapshot);
+                    await reopened.SaveChangesAsync();
+                    var journal=new GarminWriteJournal {
+                        GarminActivityId=id,ApprovedSnapshotId=snapshot.Id,
+                        FreshSnapshotId=snapshot.Id,Status="DryRunVerified",
+                        OriginalSha256=Hash(originalSets),CandidateSha256=Hash(candidate),
+                        ProposedPayloadSha256=Hash(outgoing),
+                        RecoveryPayloadSha256=Hash(originalSets),
+                        CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.WriteJournal.Add(journal);
+                    await reopened.SaveChangesAsync();
+                    if(!await GarminTransactionDryRun.PersistSyntheticPayloadAsync(
+                        reopened,id,journal.Id,candidate,outgoing))
+                        throw new InvalidOperationException("Unified payload persistence failed.");
+                    await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                        new(id,journal.Id,"Begin"),reopened),"Unified Begin");
+                    var observedSets=originalSets;
+                    var physicalPuts=0;
+                    var reads=0;
+                    using var scope=GarminGuardedWriteContextFactory.CreateIsolatedTest(
+                        new FakeGarminTransport((request,ct)=>{
+                            var expectedPath=$"/activity-service/activity/{id}";
+                            if(request.Method==HttpMethod.Get &&
+                                request.RequestUri?.AbsolutePath==expectedPath)
+                            {
+                                reads++;
+                                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                                    Content=new StringContent(originalActivity)
+                                });
+                            }
+                            if(request.Method==HttpMethod.Get &&
+                                request.RequestUri?.AbsolutePath==expectedPath+"/exerciseSets")
+                            {
+                                reads++;
+                                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                                    Content=new StringContent(observedSets)
+                                });
+                            }
+                            if(request.Method==HttpMethod.Put &&
+                                request.RequestUri?.AbsolutePath==expectedPath+"/exerciseSets")
+                            {
+                                physicalPuts++;
+                                if(scenario=="Timeout") throw new TaskCanceledException("Synthetic timeout");
+                                observedSets=scenario=="Verified" ? candidate :
+                                    GarminSetFieldDraft.Apply(originalSets,
+                                        new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
+                                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+                            }
+                            throw new InvalidOperationException("Unexpected synthetic SDK request.");
+                        }),
+                        new global::Garmin.Connect.Auth.BasicAuthParameters(
+                            "synthetic@example.invalid","synthetic-password"),
+                        new global::Garmin.Connect.Auth.NotImplementedMfaCode(),
+                        new FakeGarminTokenCache(new global::Garmin.Connect.Auth.OAuth2Token {
+                            AccessToken="synthetic",TokenType="Bearer",ExpiresIn=3600
+                        }));
+                    var status=await GarminUnifiedWriteWorkflow.ExecuteIsolatedAsync(
+                        reopened,id,journal.Id,scope);
+                    var expectedStatus=scenario=="Verified" ? "Verified" : "Uncertain";
+                    reopened.ChangeTracker.Clear();
+                    var finalJournal=await reopened.WriteJournal.AsNoTracking()
+                        .SingleAsync(x=>x.Id==journal.Id);
+                    var finalCache=await reopened.GarminSets.AsNoTracking()
+                        .SingleOrDefaultAsync(x=>x.GarminActivityId==id);
+                    if(status!=expectedStatus || finalJournal.Status!=expectedStatus ||
+                        physicalPuts!=1 || scope.Guard.PutAttempts!=1 || reads<2 ||
+                        (scenario=="Verified"
+                            ? finalCache is null || finalCache.Sha256!=Hash(candidate)
+                            : finalCache is not null))
+                        throw new InvalidOperationException("Unified SDK workflow mismatch: "+scenario);
+                    var repeat=await GarminUnifiedWriteWorkflow.ExecuteIsolatedAsync(
+                        reopened,id,journal.Id,scope);
+                    if(repeat!="Blocked" || physicalPuts!=1)
+                        throw new InvalidOperationException("Unified SDK workflow replay allowed.");
+                    Console.WriteLine("PASS: unified guarded SDK "+scenario+
+                        " -> "+expectedStatus+"; journal/cache consistent; no replay.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
