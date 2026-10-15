@@ -463,7 +463,7 @@ internal static class GarminUncertainIsolationTest
                 if(!liveAdapterBlocked)
                     throw new InvalidOperationException("Adapter could issue live PUT.");
                 Console.WriteLine("PASS: guarded Garmin transport refuses live PUT without mock.");
-                foreach(var (mode, scenarioIndex) in new[] {"Verified","Mismatch","Timeout"}.Select((value,index)=>(value,index)))
+                foreach(var (mode, scenarioIndex) in new[] {"Verified","Mismatch","Timeout","Hijack"}.Select((value,index)=>(value,index)))
                 {
                     var id=activityId+20000+scenarioIndex;
                     var activityJson=JsonSerializer.Serialize(new {activityId=id});
@@ -498,14 +498,26 @@ internal static class GarminUncertainIsolationTest
                     var result=await GarminTransactionDryRun.ExecuteVerifiedIsolationAsync(
                         reopened,id,journal.Id,
                         _=>Task.FromResult(new GarminTransactionDryRun.Observation(activityJson,observed)),
-                        (_,payload)=>GarminWriteTransportAdapter.SendAsync(id,payload,(target,_)=>{
+                        (_,payload)=>GarminWriteTransportAdapter.SendAsync(id,payload,async (target,_)=>{
                             if(target!=id) throw new InvalidOperationException("Activity mismatch.");
                             writes++;
                             if(mode=="Timeout") throw new TimeoutException("Mock PUT timeout.");
+                            if(mode=="Hijack")
+                            {
+                                // Simulate an external DB actor replacing the ownership
+                                // token while the original writer is in progress.
+                                await using var contender=new SyncDbContext(options);
+                                var other=await contender.WriteJournal.SingleAsync(x=>x.Id==journal.Id);
+                                if(other.Status!="WriteStarted" || string.IsNullOrEmpty(other.OperationId))
+                                    throw new InvalidOperationException("Writer claim not durable.");
+                                other.OperationId=Guid.NewGuid().ToString("N");
+                                await contender.SaveChangesAsync();
+                                observed=candidate;
+                                return;
+                            }
                             observed=mode=="Verified" ? candidate :
                                 GarminSetFieldDraft.Apply(baseline,
                                     new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
-                            return Task.CompletedTask;
                         }));
                     var expectedIntegrationStatus=mode=="Verified" ? "Verified" : "Uncertain";
                     if(result!=expectedIntegrationStatus || writes!=1)
@@ -515,7 +527,7 @@ internal static class GarminUncertainIsolationTest
                         .SingleAsync(x=>x.Id==journal.Id);
                     var cache=await reopened.GarminSets.AsNoTracking()
                         .SingleOrDefaultAsync(x=>x.GarminActivityId==id);
-                    if(persisted.Status!=expectedIntegrationStatus ||
+                    if(persisted.Status!=(mode=="Hijack" ? "WriteStarted" : expectedIntegrationStatus) ||
                         (mode=="Verified" ? cache is null || cache.Sha256!=Hash(candidate)
                             : cache is not null))
                         throw new InvalidOperationException("Integrated "+mode+" cache/journal inconsistent.");
