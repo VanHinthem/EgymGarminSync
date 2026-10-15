@@ -178,6 +178,50 @@ internal static class GarminUncertainIsolationTest
                    await reopened.GarminSets.CountAsync()!=initialCacheCount)
                     throw new InvalidOperationException("Mock GET mutated persistent state.");
                 Console.WriteLine("PASS: mocked GET failure -> HTTP 502; journal stays Uncertain.");
+                // Exercise atomic simulated finalization only after all read-only and
+                // lock assertions. No HTTP endpoint exposes this test helper.
+                var different=GarminSetFieldDraft.Apply(syntheticBackup.ExerciseSetsJson,
+                    new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
+                var unresolved=await GarminReconciliationFinalizer.FinalizeIsolatedAsync(
+                    reopened,activityId,firstJournalId,syntheticBackup.ExerciseSetsJson,
+                    changedSets,different,syntheticBackup.ActivityJson);
+                if(unresolved!="Uncertain")
+                    throw new InvalidOperationException("Different observation improperly finalized.");
+                var verified=await GarminReconciliationFinalizer.FinalizeIsolatedAsync(
+                    reopened,activityId,firstJournalId,syntheticBackup.ExerciseSetsJson,
+                    changedSets,changedSets,syntheticBackup.ActivityJson);
+                if(verified!="Verified")
+                    throw new InvalidOperationException("Verified observation failed to finalize.");
+                var stored=await reopened.GarminSets.AsNoTracking()
+                    .SingleOrDefaultAsync(x=>x.GarminActivityId==activityId);
+                if(stored is null || stored.Sha256!=Hash(changedSets) ||
+                    (await reopened.WriteJournal.AsNoTracking().SingleAsync(
+                        x=>x.Id==firstJournalId)).Status!="Verified")
+                    throw new InvalidOperationException("Verified/cache atomic result incorrect.");
+                var repeat=await GarminReconciliationFinalizer.FinalizeIsolatedAsync(
+                    reopened,activityId,firstJournalId,syntheticBackup.ExerciseSetsJson,
+                    changedSets,changedSets,syntheticBackup.ActivityJson);
+                if(repeat!="Blocked")
+                    throw new InvalidOperationException("Repeated finalization not blocked.");
+                Console.WriteLine("PASS: isolated Different stays Uncertain; Verified atomically updates journal/cache.");
+                Console.WriteLine("PASS: repeated finalization rejected.");
+
+                // A second isolated journal can now become Uncertain, then NotApplied;
+                // no cache mutation must be performed for NotApplied.
+                await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                    new(activityId,secondJournalId,"Begin"),reopened),"Second Begin");
+                await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                    new(activityId,secondJournalId,"MarkUncertain"),reopened),"Second Uncertain");
+                var cacheHashBefore=(await reopened.GarminSets.AsNoTracking()
+                    .SingleAsync(x=>x.GarminActivityId==activityId)).Sha256;
+                var notApplied=await GarminReconciliationFinalizer.FinalizeIsolatedAsync(
+                    reopened,activityId,secondJournalId,syntheticBackup.ExerciseSetsJson,
+                    changedSets,syntheticBackup.ExerciseSetsJson,syntheticBackup.ActivityJson);
+                var cacheHashAfter=(await reopened.GarminSets.AsNoTracking()
+                    .SingleAsync(x=>x.GarminActivityId==activityId)).Sha256;
+                if(notApplied!="NotApplied" || cacheHashBefore!=cacheHashAfter)
+                    throw new InvalidOperationException("NotApplied modified cached sets.");
+                Console.WriteLine("PASS: isolated NotApplied closes journal without cache update.");
                 Console.WriteLine("PASS: Uncertain persisted after reopened SQLite connection.");
                 Console.WriteLine("PASS: Second journal blocked and remained DryRunVerified.");
                 Console.WriteLine("PASS: Uncertain journal cannot be restarted.");
