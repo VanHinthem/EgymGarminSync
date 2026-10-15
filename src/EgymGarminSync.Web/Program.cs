@@ -51,6 +51,16 @@ using (var scope = app.Services.CreateScope())
         )
         """);
     await database.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "WritePayloads" (
+            "JournalId" INTEGER NOT NULL PRIMARY KEY,
+            "GarminActivityId" INTEGER NOT NULL,
+            "CandidateJson" TEXT NOT NULL,
+            "OutgoingJson" TEXT NOT NULL,
+            "CandidateSha256" TEXT NOT NULL,
+            "OutgoingSha256" TEXT NOT NULL
+        )
+        """);
+    await database.Database.ExecuteSqlRawAsync("""
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_WriteJournal_ActiveActivity"
         ON "WriteJournal" ("GarminActivityId")
         WHERE "Status" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')
