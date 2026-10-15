@@ -203,6 +203,26 @@ app.MapPost("/api/sync/rehearse", GarminWriteRehearsal.RehearseAsync);
 app.MapPost("/api/sync/save-plan", GarminSavePlan.PlanAsync);
 app.MapPost("/api/sync/save-prepare", GarminSaveOrchestrator.PrepareAsync);
 app.MapGet("/api/sync/write-journal/{activityId:long}", GarminWriteJournalRead.GetAsync);
+app.MapPost("/api/sync/write-cancel", async (GarminCancelRequest request, SyncDbContext db) =>
+{
+    if (request.ActivityId <= 0 || request.JournalId <= 0)
+        return Results.BadRequest(new { error = "Invalid activity or journal." });
+    // Atomic compare-and-swap: only a pre-write Ready journal can be cancelled.
+    // Never close WriteStarted or Uncertain, and never delete evidence/backups.
+    var changed = await db.WriteJournal.Where(j =>
+        j.Id == request.JournalId && j.GarminActivityId == request.ActivityId &&
+        j.Status == "Ready" && j.OperationId == null)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(j => j.Status, "Cancelled")
+            .SetProperty(j => j.UpdatedUtc, DateTimeOffset.UtcNow)
+            .SetProperty(j => j.ApprovedUntilUtc, (DateTimeOffset?)null)
+            .SetProperty(j => j.ApprovedCandidateSha256, (string?)null)
+            .SetProperty(j => j.ApprovedOutgoingSha256, (string?)null));
+    return changed == 1
+        ? Results.Ok(new { status = "Cancelled", request.ActivityId, request.JournalId })
+        : Results.Conflict(new { error = "Only an unused Ready preparation can be cancelled. Check journal status." });
+});
+
 app.MapPost("/api/sync/write-simulate", GarminWriteSimulation.RunAsync);
 app.MapPost("/api/sync/journal-transition-test", GarminJournalLifecycle.TransitionAsync);
 app.MapPost("/api/sync/reconcile-simulate", GarminReconciliation.SimulateAsync);
@@ -216,3 +236,4 @@ app.MapPost("/api/sync", () => Results.Problem(
     statusCode: 501));
 
 app.Run();
+\ninternal sealed record GarminCancelRequest(long ActivityId, long JournalId);\n
