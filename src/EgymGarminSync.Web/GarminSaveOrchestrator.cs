@@ -12,8 +12,9 @@ using Microsoft.EntityFrameworkCore;
 namespace EgymGarminSync.Web;
 
 /// <summary>
-/// Generic save orchestration, currently DRY RUN ONLY.
-/// The write transport is deliberately not called or exposed in this phase.
+/// Generic save preparation. Performs fresh Garmin GET validation and persists
+/// the immutable backup, exact candidate/outgoing payloads and a Ready journal.
+/// It never performs the Garmin PUT itself.
 /// </summary>
 internal static class GarminSaveOrchestrator
 {
@@ -106,7 +107,7 @@ internal static class GarminSaveOrchestrator
                 GarminActivityId = request.GarminId,
                 ApprovedSnapshotId = request.SnapshotId,
                 FreshSnapshotId = backup.Id,
-                Status = "DryRunVerified",
+                Status = "Ready",
                 OriginalSha256 = Hash(sets),
                 CandidateSha256 = Hash(candidate),
                 ProposedPayloadSha256 = Hash(normalized),
@@ -116,17 +117,26 @@ internal static class GarminSaveOrchestrator
             };
             db.WriteJournal.Add(journal);
             await db.SaveChangesAsync();
+            db.WritePayloads.Add(new GarminWritePayload {
+                JournalId = journal.Id,
+                GarminActivityId = request.GarminId,
+                CandidateJson = candidate,
+                OutgoingJson = normalized,
+                CandidateSha256 = Hash(candidate),
+                OutgoingSha256 = Hash(normalized)
+            });
+            await db.SaveChangesAsync();
             await transaction.CommitAsync();
             tokenCache.ClearLoginCooldown();
             return Results.Ok(new {
-                readOnly=true, canWrite=false, activityId=request.GarminId,
+                readOnly=false, canWrite=GarminWriteTransportAdapter.LiveWriteEnabled, activityId=request.GarminId,
                 sourceBackupId=request.SnapshotId, freshBackupId=backup.Id,
                 journalId=journal.Id, journalStatus=journal.Status,
                 fieldsChanged=edits.Count(e=>e.Expected!=e.Value),
                 originalSha256=Hash(sets), candidateSha256=Hash(candidate),
                 normalizedSha256=Hash(normalized), recoverySha256=Hash(recovery),
                 concurrencyCheckPassed=true, restoreContractValid=true,
-                message="Fresh live state verified and immutable backup plus dry-run journal recorded. NO PUT."
+                message="Fresh live state verified; immutable backup, exact payloads and Ready journal recorded. NO PUT."
             });
         }
         catch (InvalidOperationException)
