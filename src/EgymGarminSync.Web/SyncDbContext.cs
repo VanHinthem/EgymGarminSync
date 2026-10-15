@@ -17,6 +17,8 @@ internal sealed class SyncDbContext(DbContextOptions<SyncDbContext> options) : D
         builder.Entity<SyncCheckpoint>().HasKey(x => x.Source);
         builder.Entity<GarminSetsCache>().HasKey(x => x.GarminActivityId);
         builder.Entity<GarminWriteJournal>().HasKey(x => x.Id);
+        builder.Entity<GarminWriteJournal>().HasIndex(x => x.GarminActivityId)
+            .IsUnique().HasFilter("\"Status\" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')");
         builder.Entity<GarminSnapshot>().HasKey(x => x.Id);
         builder.Entity<GarminSnapshot>().HasIndex(x => new { x.GarminActivityId, x.CapturedUtc });
     }
