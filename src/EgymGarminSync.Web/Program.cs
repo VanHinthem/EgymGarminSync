@@ -56,7 +56,10 @@ using (var scope = app.Services.CreateScope())
             "CreatedUtc" TEXT NOT NULL,
             "UpdatedUtc" TEXT NOT NULL,
             "ErrorCode" TEXT NULL,
-            "OperationId" TEXT NULL
+            "OperationId" TEXT NULL,
+            "ApprovedUntilUtc" TEXT NULL,
+            "ApprovedCandidateSha256" TEXT NULL,
+            "ApprovedOutgoingSha256" TEXT NULL
         )
         """);
     await database.Database.ExecuteSqlRawAsync("""
@@ -80,6 +83,12 @@ using (var scope = app.Services.CreateScope())
     if(!writeJournalColumns.Contains("OperationId",StringComparer.OrdinalIgnoreCase))
         await database.Database.ExecuteSqlRawAsync(
             "ALTER TABLE \"WriteJournal\" ADD COLUMN \"OperationId\" TEXT NULL");
+    foreach(var column in new[] {"ApprovedUntilUtc","ApprovedCandidateSha256","ApprovedOutgoingSha256"})
+    {
+        if(!writeJournalColumns.Contains(column,StringComparer.OrdinalIgnoreCase))
+            await database.Database.ExecuteSqlRawAsync(
+                $"ALTER TABLE \"WriteJournal\" ADD COLUMN \"{column}\" TEXT NULL");
+    }
     await GarminCrashRecovery.RecoverAsync(database);
 }
 app.UseCors("LocalUi");
