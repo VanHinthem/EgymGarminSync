@@ -762,9 +762,9 @@ internal static class GarminUncertainIsolationTest
                             ? finalCache is null || finalCache.Sha256!=Hash(candidate)
                             : finalCache is not null))
                         throw new InvalidOperationException("Unified SDK workflow mismatch: "+scenario);
-                    var repeat=await GarminUnifiedWriteWorkflow.ExecuteIsolatedAsync(
+                    var unifiedRepeat=await GarminUnifiedWriteWorkflow.ExecuteIsolatedAsync(
                         reopened,id,journal.Id,scope);
-                    if(repeat!="Blocked" || physicalPuts!=1)
+                    if(unifiedRepeat!="Blocked" || physicalPuts!=1)
                         throw new InvalidOperationException("Unified SDK workflow replay allowed.");
                     Console.WriteLine("PASS: unified guarded SDK "+scenario+
                         " -> "+expectedStatus+"; journal/cache consistent; no replay.");
