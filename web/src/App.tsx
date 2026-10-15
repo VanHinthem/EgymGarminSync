@@ -45,6 +45,8 @@ function App() {
   const [writePlan,setWritePlan] = useState<{journalId:number;candidateSha256:string;outgoingSha256:string;canWrite:boolean}|null>(null)
   const [confirmation,setConfirmation] = useState('')
   const [preparing,setPreparing] = useState(false)
+  const [writing,setWriting] = useState(false)
+  const [writeAttempted,setWriteAttempted] = useState(false)
   const [liveRows,setLiveRows] = useState<SetRow[]>([])
   const [warnings,setWarnings] = useState<string[]>([])
   const [setsLoading,setSetsLoading] = useState(false)
@@ -82,7 +84,7 @@ function App() {
     if (state.reps!==undefined && state.reps!==row.garminReps) result.push(`${row.exercise} set ${row.set}: ${row.garminReps} → ${state.reps} reps`)
     return result
   }),[draft,displayedRows])
-  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}
+  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('');setWriteAttempted(false)}
   function selectedEdits(){
     return displayedRows.flatMap(r=>{
       const change=draft[r.id]??{}
@@ -109,7 +111,7 @@ function App() {
   }
   async function prepareSave(){
     if(mode!=='live'||changeList.length===0||preparing)return
-    setPreparing(true);setWritePlan(null);setConfirmation('');setPreparedBackupId(null)
+    setPreparing(true);setWritePlan(null);setConfirmation('');setPreparedBackupId(null);setWriteAttempted(false)
     const activityId=Number(selectedGarmin)
     const edits=selectedEdits()
     try{
@@ -146,15 +148,16 @@ function App() {
       if(!ready){setPreviewResult('Geen Ready schrijfvoorbereiding gevonden.');return}
       setWritePlan({journalId:ready.id,candidateSha256:ready.candidateSha256,
         outgoingSha256:ready.proposedPayloadSha256,canWrite:health.writeEnabled})
-      setConfirmation('');setReview(true)
+      setConfirmation('');setReview(true);setWriteAttempted(false)
       setPreviewResult(`Schrijfvoorbereiding #${ready.id} geladen. Controleer de exacte wijziging en bevestiging.`)
     }catch{setPreviewResult('Kon de voorbereiding niet laden.')}
   }
   async function executeWrite(){
-    if(!writePlan)return
+    if(!writePlan||writing||writeAttempted)return
     const activityId=Number(selectedGarmin)
     const exact=`APPROVE GARMIN ${activityId} ${writePlan.journalId}`
     if(confirmation!==exact)return
+    setWriting(true);setWriteAttempted(true)
     try{
       const response=await fetch('/api/sync/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         activityId,journalId:writePlan.journalId,candidateSha256:writePlan.candidateSha256,
@@ -165,8 +168,9 @@ function App() {
       setPreviewResult(result?.status==='Verified'
         ? 'Wijzigingen opgeslagen in Garmin en gecontroleerd. Je lokale gegevens zijn bijgewerkt.'
         : 'Garmin-opslag gaf geen bevestigde eindstatus.')
-      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setConfirmation('')}
+      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setConfirmation('');setWriteAttempted(false)}
     }catch{setPreviewResult('Garmin-opslag niet bereikbaar. Controleer het journal voordat je opnieuw iets doet.')}
+    finally{setWriting(false)}
   }
   function pickEgym(id:string){setPreparedBackupId(null);setWritePlan(null);setConfirmation('');setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
   async function readCache(){
@@ -216,7 +220,7 @@ function App() {
       {setsLoading&&<div className="empty">Oefeningen laden...</div>}
       {selectedGarmin&&!setsLoading&&displayedRows.length>0?<><div className="tableScroll"><table><thead><tr><th>EGYM-oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th><th>Garmin-oefening</th></tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}><td><strong>{row.egymExercise??row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div>{row.egymKg} kg</div><div>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td><td><strong>{row.garminExercise??row.exercise}</strong><small>Set {row.set}</small></td></tr>)}</tbody></table></div>
       <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>void checkServerPreview()}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
-      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&writePlan===null&&<button className="secondary" disabled={preparing} onClick={()=>void prepareSave()}>{preparing?'Voorbereiden...':'Opslaan voorbereiden'}</button>}{writePlan&&<><p>Bevestig exact: <code>{`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`}</code></p><input value={confirmation} onChange={e=>setConfirmation(e.target.value)} placeholder="Typ de exacte bevestiging"/><button className="primary" disabled={!writePlan.canWrite||confirmation!==`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`} onClick={()=>void executeWrite()}><Save size={16}/> Opslaan in Garmin</button>{!writePlan.canWrite&&<p>Opslaan is op dit moment uitgeschakeld. Je wijzigingen zijn alleen voorbereid.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
+      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&writePlan===null&&<button className="secondary" disabled={preparing} onClick={()=>void prepareSave()}>{preparing?'Voorbereiden...':'Opslaan voorbereiden'}</button>}{writePlan&&<><p>Bevestig exact: <code>{`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`}</code></p><input value={confirmation} onChange={e=>setConfirmation(e.target.value)} placeholder="Typ de exacte bevestiging"/><button className="primary" disabled={writing||writeAttempted||!writePlan.canWrite||confirmation!==`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`} onClick={()=>void executeWrite()}><Save size={16}/> {writing?'Opslaan en controleren...':'Opslaan in Garmin'}</button>{writeAttempted&&writePlan&&<p>Deze opslagpoging is afgesloten voor herhaling. Controleer eerst het journal en de Garmin-gegevens voordat je een nieuwe voorbereiding maakt.</p>}{!writePlan.canWrite&&<p>Opslaan is op dit moment uitgeschakeld. Je wijzigingen zijn alleen voorbereid.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
     </section>
   </main>
 }
