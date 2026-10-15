@@ -92,12 +92,12 @@ internal static class GarminLiveReconciliation
 
     private static async Task<Observation> ReadFromGarminAsync(long activityId)
     {
-        if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Windows DPAPI required.");
+        if (!GarminTokenCacheProvider.IsSupported) throw new InvalidOperationException("Windows DPAPI required.");
         var email=Environment.GetEnvironmentVariable("GARMIN_EMAIL");
         var password=Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
         if(string.IsNullOrWhiteSpace(email)||string.IsNullOrWhiteSpace(password))
             throw new InvalidOperationException("Garmin credentials unavailable.");
-        var tokenCache=new WindowsGarminTokenCache(email);
+        var tokenCache=new GarminTokenCacheProvider(email);
         if(tokenCache.IsInLoginCooldown(out _)) throw new InvalidOperationException("Garmin login cooldown.");
         using var http=new HttpClient(GarminIpv4Transport.Create());
         var context=new GarminConnectContext(http,new BasicAuthParameters(email,password),
