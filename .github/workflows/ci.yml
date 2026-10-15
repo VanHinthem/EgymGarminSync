@@ -21,6 +21,8 @@ jobs:
         run: dotnet build src/EgymGarminSync.Garmin.Cli/EgymGarminSync.Garmin.Cli.csproj --configuration Release
       - name: Build web API
         run: dotnet build src/EgymGarminSync.Web/EgymGarminSync.Web.csproj --configuration Release
+      - name: Execute guarded write integration check
+        run: dotnet run --project src/EgymGarminSync.Web/EgymGarminSync.Web.csproj --configuration Release -- --test-uncertain-isolation
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
