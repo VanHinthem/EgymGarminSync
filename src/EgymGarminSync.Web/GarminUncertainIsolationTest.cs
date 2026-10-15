@@ -601,8 +601,9 @@ internal static class GarminUncertainIsolationTest
                                 refreshPosts++;
                                 return Task.FromResult(new HttpResponseMessage(
                                     System.Net.HttpStatusCode.OK) {
-                                    Content=new StringContent(
-                                        "{\\"access_token\\":\\"synthetic-refreshed\\",\\"token_type\\":\\"Bearer\\",\\"expires_in\\":3600}")
+                                    Content=new StringContent("""
+                                        {"access_token":"synthetic-refreshed","token_type":"Bearer","expires_in":3600}
+                                        """)
                                 });
                             }
                             throw new InvalidOperationException("Unexpected outbound request.");
