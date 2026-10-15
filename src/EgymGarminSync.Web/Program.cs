@@ -167,6 +167,7 @@ app.MapGet("/api/sync/write-journal/{activityId:long}", GarminWriteJournalRead.G
 app.MapPost("/api/sync/write-simulate", GarminWriteSimulation.RunAsync);
 app.MapPost("/api/sync/journal-transition-test", GarminJournalLifecycle.TransitionAsync);
 app.MapPost("/api/sync/reconcile-simulate", GarminReconciliation.SimulateAsync);
+app.MapPost("/api/sync/reconcile-live-readonly", GarminLiveReconciliation.ReadAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
     "Garmin writes are disabled in this first web slice.", statusCode: 501));
