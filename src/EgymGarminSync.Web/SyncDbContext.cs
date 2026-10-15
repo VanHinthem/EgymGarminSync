@@ -83,6 +83,9 @@ internal sealed class GarminWriteJournal
     public DateTimeOffset UpdatedUtc { get; set; }
     public string? ErrorCode { get; set; }
     public string? OperationId { get; set; }
+    public DateTimeOffset? ApprovedUntilUtc { get; set; }
+    public string? ApprovedCandidateSha256 { get; set; }
+    public string? ApprovedOutgoingSha256 { get; set; }
 }
 
 internal sealed class GarminWritePayload
