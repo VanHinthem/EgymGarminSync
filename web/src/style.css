@@ -55,3 +55,9 @@
 .matchRow .action button:disabled{opacity:.35}
 .differenceValue{color:#176574;font-weight:800}
 @media(max-width:760px){.compareTools{justify-content:flex-start}.compareHeader{flex-wrap:wrap;gap:10px}}
+
+.saveConfirm{margin-top:14px;padding:16px;border:1px solid #a9cfd0;border-radius:10px;background:#fff}
+.saveConfirm h3{margin:0 0 7px}
+.saveConfirm p{margin:0 0 12px}
+.saveConfirm .buttons{display:flex;gap:10px;flex-wrap:wrap}
+.saveConfirm button{margin-top:0}
