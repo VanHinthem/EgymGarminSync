@@ -10,8 +10,12 @@ internal static class GarminCrashRecovery
     private static string Hash(string s) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
-    internal static async Task<int> RecoverAsync(SyncDbContext db)
+    internal static async Task<int> RecoverAsync(SyncDbContext db,
+        bool exclusiveWriterShutdownConfirmed = false)
     {
+        // Startup alone cannot prove another process has stopped writing.
+        // Leave WriteStarted blocked until exclusive shutdown is confirmed.
+        if (!exclusiveWriterShutdownConfirmed) return 0;
         await using var tx=await db.Database.BeginTransactionAsync();
         var interrupted=await db.WriteJournal.Where(x=>x.Status=="WriteStarted").ToListAsync();
         foreach(var entry in interrupted)
