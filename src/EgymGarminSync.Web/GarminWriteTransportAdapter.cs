@@ -33,12 +33,13 @@ internal static class GarminWriteTransportAdapter
     // The existing transport is referenced here but this method cannot be
     // invoked through SendAsync while LiveWriteEnabled remains false.
     // Kept separate to make the future production security boundary explicit.
-    internal static Task SendActualAsync(GarminConnectContext context,
+    internal static Task SendActualAsync(GarminGuardedWriteContextFactory.Scope guardedScope,
         long activityId,JsonElement completePayload)
     {
         if(!LiveWriteEnabled)
             throw new InvalidOperationException("Live Garmin PUT is disabled in source code.");
+        ArgumentNullException.ThrowIfNull(guardedScope);
         return GarminExerciseSetsReplaceTransport.ReplaceAsync(
-            context,activityId,completePayload);
+            guardedScope.Context,activityId,completePayload);
     }
 }
