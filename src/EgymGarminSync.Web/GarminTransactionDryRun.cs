@@ -21,16 +21,20 @@ internal static class GarminTransactionDryRun
 
     internal static Task<string> ExecuteAsync(SyncDbContext db, long activityId,
         long journalId, Read read, Write write) =>
-        ExecuteCoreAsync(db,activityId,journalId,read,write,false);
+        ExecuteCoreAsync(db,activityId,journalId,read,write,false,false);
 
     // Isolated harness only: exercises the same terminal journal/cache transaction
     // expected from a future production implementation. Injected IO is synthetic.
     internal static Task<string> ExecuteVerifiedIsolationAsync(SyncDbContext db, long activityId,
         long journalId, Read read, Write write) =>
-        ExecuteCoreAsync(db,activityId,journalId,read,write,true);
+        ExecuteCoreAsync(db,activityId,journalId,read,write,true,false);
+
+    internal static Task<string> ExecuteApprovedIsolationAsync(SyncDbContext db,long activityId,
+        long journalId,Read read,Write write) =>
+        ExecuteCoreAsync(db,activityId,journalId,read,write,true,true);
 
     private static async Task<string> ExecuteCoreAsync(SyncDbContext db, long activityId,
-        long journalId, Read read, Write write, bool isolatedVerified)
+        long journalId, Read read, Write write, bool isolatedVerified, bool requireApproval)
     {
         var journal = await db.WriteJournal.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == journalId && x.GarminActivityId == activityId && x.Status == "Ready");
@@ -70,6 +74,8 @@ internal static class GarminTransactionDryRun
             return "Blocked";
         }
 
+        if(requireApproval && !GarminWriteApproval.IsValid(journal,payload,DateTimeOffset.UtcNow))
+            return "Blocked";
         var operationId=Guid.NewGuid().ToString("N");
 
         // Persist intent *before* invoking the injected writer. Once this commit
@@ -77,7 +83,9 @@ internal static class GarminTransactionDryRun
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
             var tracked = await db.WriteJournal.SingleAsync(x => x.Id == journalId);
-            if (tracked.Status != "Ready") return "Blocked";
+            if (tracked.Status != "Ready" || (requireApproval &&
+                !GarminWriteApproval.IsValid(tracked,payload,DateTimeOffset.UtcNow))) return "Blocked";
+            tracked.ApprovedUntilUtc=null; // consume approval before the write
             tracked.OperationId=operationId;
             tracked.Status = "WriteStarted";
             tracked.UpdatedUtc = DateTimeOffset.UtcNow;
