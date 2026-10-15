@@ -12,8 +12,10 @@ internal static class GarminWriteTransportAdapter
 {
     // Old single-activity trial setting does not authorize general writes.
     internal static bool LiveWriteEnabled =>
-        OperatingSystem.IsWindows() &&
-        Environment.GetEnvironmentVariable("GARMIN_WRITE_ENABLED") == "1";
+        GarminTokenCacheProvider.IsSupported &&
+        Environment.GetEnvironmentVariable("GARMIN_WRITE_ENABLED") == "1" &&
+        (OperatingSystem.IsWindows() ||
+         Environment.GetEnvironmentVariable("GARMIN_LINUX_WRITE_ENABLED") == "1");
     internal delegate Task Replace(long activityId, JsonElement fullPayload);
 
     internal static async Task SendAsync(long activityId, string fullPayloadJson,
