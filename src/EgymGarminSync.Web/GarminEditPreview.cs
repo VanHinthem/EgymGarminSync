@@ -26,7 +26,7 @@ internal static class GarminEditPreview
 
     private static async Task<IResult> ValidateAsync(Request request, SyncDbContext db, bool prepare)
     {
-        if (!OperatingSystem.IsWindows()) return Results.Problem("Windows DPAPI required.", statusCode:501);
+        if (!GarminTokenCacheProvider.IsSupported) return Results.Problem("Windows DPAPI required.", statusCode:501);
         if (request.GarminId <= 0 || request.Edits is not { Length: > 0 and <= 72 })
             return Results.BadRequest(new { error="Select one or more Garmin field changes." });
         var email=Environment.GetEnvironmentVariable("GARMIN_EMAIL");
@@ -35,7 +35,7 @@ internal static class GarminEditPreview
             return Results.Problem("Garmin credentials unavailable.",statusCode:503);
         try
         {
-            var cache=new WindowsGarminTokenCache(email);
+            var cache=new GarminTokenCacheProvider(email);
             if (cache.IsInLoginCooldown(out _)) return Results.Problem("Garmin login cooldown.",statusCode:429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
             var context=new GarminConnectContext(http,new BasicAuthParameters(email,password),
