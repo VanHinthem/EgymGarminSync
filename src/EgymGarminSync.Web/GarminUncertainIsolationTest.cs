@@ -414,6 +414,32 @@ internal static class GarminUncertainIsolationTest
                         throw new InvalidOperationException("Concurrent claim did not produce exactly one owner.");
                 }
                 Console.WriteLine("PASS: concurrent independent SQLite contexts permit exactly one Ready claim.");
+                // Real OS process race, using two fresh journal rows against
+                // the same disposable SQLite file. Neither process can write Garmin.
+                var processId=activityId+10000;
+                var processActivity=JsonSerializer.Serialize(new {activityId=processId});
+                var processSets=BuildSyntheticSets(processId);
+                var processBackup=new GarminSnapshot {
+                    GarminActivityId=processId,Kind="WritePreparation",
+                    ActivityJson=processActivity,ActivitySha256=Hash(processActivity),
+                    ExerciseSetsJson=processSets,SetsSha256=Hash(processSets),
+                    CapturedUtc=DateTimeOffset.UtcNow
+                };
+                reopened.GarminSnapshots.Add(processBackup);
+                await reopened.SaveChangesAsync();
+                var processEntries=Enumerable.Range(0,2).Select(_=>new GarminWriteJournal {
+                    GarminActivityId=processId,ApprovedSnapshotId=processBackup.Id,
+                    FreshSnapshotId=processBackup.Id,Status="DryRunVerified",
+                    OriginalSha256=Hash(processSets),CandidateSha256=Hash(processSets),
+                    ProposedPayloadSha256=Hash(processSets),
+                    RecoveryPayloadSha256=Hash(processSets),
+                    CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                }).ToArray();
+                reopened.WriteJournal.AddRange(processEntries);
+                await reopened.SaveChangesAsync();
+                reopened.ChangeTracker.Clear();
+                await GarminProcessRaceTest.RunParentAsync(path,processId,
+                    processEntries[0].Id,processEntries[1].Id);
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
