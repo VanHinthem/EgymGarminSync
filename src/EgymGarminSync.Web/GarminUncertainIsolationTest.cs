@@ -368,6 +368,52 @@ internal static class GarminUncertainIsolationTest
                 }
                 Console.WriteLine("PASS: independent SQLite context cannot claim competing active journal.");
 
+                // Race two independently scoped DbContexts claiming different
+                // journal rows for the same synthetic activity.
+                var raceId=activityId+9000;
+                var raceActivity=JsonSerializer.Serialize(new {activityId=raceId});
+                var raceSets=BuildSyntheticSets(raceId);
+                var raceSnapshot=new GarminSnapshot {
+                    GarminActivityId=raceId, Kind="WritePreparation",
+                    ActivityJson=raceActivity, ActivitySha256=Hash(raceActivity),
+                    ExerciseSetsJson=raceSets, SetsSha256=Hash(raceSets),
+                    CapturedUtc=DateTimeOffset.UtcNow
+                };
+                reopened.GarminSnapshots.Add(raceSnapshot);
+                await reopened.SaveChangesAsync();
+                var raceRows=Enumerable.Range(0,2).Select(_=>new GarminWriteJournal {
+                    GarminActivityId=raceId, ApprovedSnapshotId=raceSnapshot.Id,
+                    FreshSnapshotId=raceSnapshot.Id, Status="DryRunVerified",
+                    OriginalSha256=Hash(raceSets), CandidateSha256=Hash(raceSets),
+                    ProposedPayloadSha256=Hash(raceSets), RecoveryPayloadSha256=Hash(raceSets),
+                    CreatedUtc=DateTimeOffset.UtcNow, UpdatedUtc=DateTimeOffset.UtcNow
+                }).ToArray();
+                reopened.WriteJournal.AddRange(raceRows);
+                await reopened.SaveChangesAsync();
+                reopened.ChangeTracker.Clear();
+                using(var start=new ManualResetEventSlim(false))
+                {
+                    var claims=raceRows.Select(row=>Task.Run(async ()=>{
+                        using var contender=new SyncDbContext(options);
+                        start.Wait();
+                        try {
+                            var result=await GarminJournalLifecycle.TransitionAsync(
+                                new(raceId,row.Id,"Begin"),contender);
+                            return result is IStatusCodeHttpResult {StatusCode:200};
+                        }
+                        catch(DbUpdateException) { return false; }
+                        catch(Microsoft.Data.Sqlite.SqliteException e) when(e.SqliteErrorCode==5 ||
+                            e.SqliteErrorCode==19) { return false; }
+                    })).ToArray();
+                    start.Set();
+                    var outcomes=await Task.WhenAll(claims);
+                    var persisted=await reopened.WriteJournal.AsNoTracking()
+                        .Where(x=>x.GarminActivityId==raceId && x.Status=="Ready")
+                        .CountAsync();
+                    if(outcomes.Count(x=>x)!=1 || persisted!=1)
+                        throw new InvalidOperationException("Concurrent claim did not produce exactly one owner.");
+                }
+                Console.WriteLine("PASS: concurrent independent SQLite contexts permit exactly one Ready claim.");
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
