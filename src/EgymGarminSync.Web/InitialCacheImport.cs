@@ -15,7 +15,7 @@ internal static class InitialCacheImport
 {
     public static async Task<IResult> ImportAsync(SyncDbContext db, bool incremental = false)
     {
-        if (!OperatingSystem.IsWindows())
+        if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Garmin import currently requires Windows DPAPI.", statusCode: 501);
         var ee=Environment.GetEnvironmentVariable("EGYM_EMAIL");
         var ep=Environment.GetEnvironmentVariable("EGYM_PASSWORD");
@@ -39,7 +39,7 @@ internal static class InitialCacheImport
             using var egym=new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"),ee!,ep!);
             var today=DateOnly.FromDateTime(DateTime.Today);
             egymWorkouts=(await egym.GetWorkoutsAsync(since,today)).ToList();
-            var cache=new WindowsGarminTokenCache(ge!);
+            var cache=new GarminTokenCacheProvider(ge!);
             if(cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.",statusCode:429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
