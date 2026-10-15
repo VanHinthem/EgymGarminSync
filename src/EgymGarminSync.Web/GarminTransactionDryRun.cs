@@ -38,9 +38,11 @@ internal static class GarminTransactionDryRun
         if (!GarminActivityMetadataTolerance.IsAcceptable(backup.ActivityJson,proposed.ActivityJson) ||
             !GarminFullWeightReadback.Matches(backup.ExerciseSetsJson,proposed.ExerciseSetsJson))
             return "Stale";
-        var payload = SyntheticPayloads.TryGet(journalId);
-        if (payload is null || Hash(payload.Value.Candidate) != journal.CandidateSha256 ||
-            Hash(payload.Value.Outgoing) != journal.ProposedPayloadSha256)
+        var payload = await db.WritePayloads.AsNoTracking().SingleOrDefaultAsync(x=>x.JournalId==journalId && x.GarminActivityId==activityId);
+        if (payload is null || Hash(payload.CandidateJson) != journal.CandidateSha256 ||
+            Hash(payload.OutgoingJson) != journal.ProposedPayloadSha256 ||
+            payload.CandidateSha256 != journal.CandidateSha256 ||
+            payload.OutgoingSha256 != journal.ProposedPayloadSha256)
             return "Blocked";
 
         // Persist intent *before* invoking the injected writer. Once this commit
@@ -59,11 +61,11 @@ internal static class GarminTransactionDryRun
         Observation? after = null;
         try
         {
-            await write(activityId, payload.Value.Outgoing);
+            await write(activityId, payload.OutgoingJson);
             after = await read(activityId);
             if (GarminActivityMetadataTolerance.IsAcceptable(
                     backup.ActivityJson, after.ActivityJson) &&
-                GarminFullWeightReadback.Matches(payload.Value.Candidate, after.ExerciseSetsJson))
+                GarminFullWeightReadback.Matches(payload.CandidateJson, after.ExerciseSetsJson))
                 result = "SimulatedVerified";
         }
         catch(Exception) { /* Unknown outcome; never retry the writer. */ }
@@ -82,15 +84,23 @@ internal static class GarminTransactionDryRun
         return result;
     }
 
-    // Test-only payload registry is never exposed to clients or production HTTP.
-    internal static class SyntheticPayloads
+    // In the isolated harness this is a durable record, never a Garmin authorization.
+    internal static async Task<bool> PersistSyntheticPayloadAsync(
+        SyncDbContext db, long activityId, long journalId, string candidate, string outgoing)
     {
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<long,(string Candidate,string Outgoing)>
-            Payloads = new();
-        internal static void Set(long journalId,string candidate,string outgoing) =>
-            Payloads[journalId] = (candidate,outgoing);
-        internal static (string Candidate,string Outgoing)? TryGet(long journalId) =>
-            Payloads.TryGetValue(journalId,out var value) ? value : null;
-        internal static void Remove(long journalId) => Payloads.TryRemove(journalId,out _);
+        await using var tx=await db.Database.BeginTransactionAsync();
+        var journal=await db.WriteJournal.AsNoTracking().SingleOrDefaultAsync(x=>
+            x.Id==journalId && x.GarminActivityId==activityId && x.Status=="DryRunVerified");
+        if(journal is null || Hash(candidate)!=journal.CandidateSha256 ||
+            Hash(outgoing)!=journal.ProposedPayloadSha256 ||
+            await db.WritePayloads.AnyAsync(x=>x.JournalId==journalId)) return false;
+        db.WritePayloads.Add(new GarminWritePayload {
+            JournalId=journalId,GarminActivityId=activityId,
+            CandidateJson=candidate,OutgoingJson=outgoing,
+            CandidateSha256=Hash(candidate),OutgoingSha256=Hash(outgoing)
+        });
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return true;
     }
 }
