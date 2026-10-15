@@ -347,6 +347,27 @@ internal static class GarminUncertainIsolationTest
                     throw new InvalidOperationException("Recovered write could be retried.");
                 Console.WriteLine("PASS: interrupted WriteStarted -> persistent Uncertain; repeat recovery safe.");
                 Console.WriteLine("PASS: recovery payload survives and synthetic writer cannot retry.");
+                // Independent EF context against the SAME SQLite file represents
+                // another API process. SQLite unique partial index must reject its
+                // attempt to claim a second active journal for the same activity.
+                await using(var competing = new SyncDbContext(options))
+                {
+                    competing.WriteJournal.Add(new GarminWriteJournal {
+                        GarminActivityId=crashId,ApprovedSnapshotId=crashBackup.Id,
+                        FreshSnapshotId=crashBackup.Id,Status="Ready",
+                        OriginalSha256=Hash(crashSets),CandidateSha256=Hash(crashCandidate),
+                        ProposedPayloadSha256=Hash(crashOutgoing),
+                        RecoveryPayloadSha256=Hash(crashSets),
+                        CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                    });
+                    bool rejected=false;
+                    try { await competing.SaveChangesAsync(); }
+                    catch(DbUpdateException) { rejected=true; }
+                    if(!rejected)
+                        throw new InvalidOperationException("Independent writer bypassed SQLite activity constraint.");
+                }
+                Console.WriteLine("PASS: independent SQLite context cannot claim competing active journal.");
+
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
