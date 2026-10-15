@@ -27,3 +27,28 @@ ASP.NET Core (.NET 10), React and TypeScript; later Docker deployment on a NAS. 
 - [Unofficial Garmin Connect API client](https://github.com/cyberjunky/python-garminconnect)
 
 See [functional requirements](docs/requirements.md). Both APIs are unofficial and must be validated against real account data.
+
+## Docker / GHCR (experimental Linux packaging)
+
+Every push to `main` builds and publishes multi-architecture images to
+`ghcr.io/vanhinthem/egymgarminsync:latest` and `sha-<commit>` using
+[Publish Docker image](.github/workflows/docker.yml).
+
+Copy `docker-compose.example.yml` to `docker-compose.yml`, set
+`EGYM_EMAIL`, `EGYM_PASSWORD`, `GARMIN_EMAIL` and `GARMIN_PASSWORD`
+in the deployment environment, then run `docker compose up -d`.
+The example binds HTTP to host loopback `127.0.0.1:5187` for a local
+reverse proxy. Store persistent SQLite data in `./data`; never discard
+or overwrite that directory during upgrades.
+
+**Not yet ready for NAS production sync:** Garmin OAuth caching currently
+uses **Windows DPAPI** and the import/write paths require Windows. The
+Linux container can serve its web UI, health endpoint and persisted cached
+data, but cannot sign in to Garmin or perform the normal import/write workflow
+until a secure Linux-compatible token cache and platform guards are implemented.
+Do not copy a Windows `.dpapi` token cache into Linux. Writes stay disabled
+in the Linux build. The image and compose example are deployment scaffolding,
+not a declaration that Garmin synchronization works on Linux yet.
+
+The GitHub package may initially be private; configure NAS GHCR authentication
+if the registry denies an anonymous pull.
