@@ -14,11 +14,13 @@ internal static class GarminGuardedWriteContextFactory
     {
         private readonly HttpClient _http;
         internal GarminSinglePutGuard Guard { get; }
+        internal bool IsSyntheticTestContext { get; }
         internal GarminConnectContext Context { get; }
 
         internal Scope(HttpMessageHandler inner, IAuthParameters auth,
-            IMfaCodeProvider mfa, ITokenCache tokens)
+            IMfaCodeProvider mfa, ITokenCache tokens, bool syntheticTestContext)
         {
+            IsSyntheticTestContext=syntheticTestContext;
             Guard = new GarminSinglePutGuard(inner);
             _http = new HttpClient(Guard);
             Context = new GarminConnectContext(_http, auth, mfa, tokens);
@@ -34,6 +36,10 @@ internal static class GarminGuardedWriteContextFactory
         ArgumentNullException.ThrowIfNull(auth);
         ArgumentNullException.ThrowIfNull(mfa);
         ArgumentNullException.ThrowIfNull(tokens);
-        return new Scope(inner, auth, mfa, tokens);
+        return new Scope(inner, auth, mfa, tokens, false);
     }
+    // Test-only context marker; does not grant any real Garmin-write permission.
+    internal static Scope CreateIsolatedTest(HttpMessageHandler syntheticHandler,
+        IAuthParameters auth, IMfaCodeProvider mfa, ITokenCache tokens) =>
+        new Scope(syntheticHandler, auth, mfa, tokens, true);
 }
