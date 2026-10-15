@@ -520,6 +520,33 @@ internal static class GarminUncertainIsolationTest
                     Console.WriteLine("PASS: integrated mocked PUT "+mode+
                         " -> "+expectedIntegrationStatus+"; journal/cache atomic and duplicate blocked.");
                 }
+                foreach(var scenario in new[] {"401","Timeout","NetworkError"})
+                {
+                    var physicalSends=0;
+                    using var guard=new GarminSinglePutGuard(new FakeGarminTransport((request,ct)=>{
+                        Interlocked.Increment(ref physicalSends);
+                        if(scenario=="Timeout") throw new TaskCanceledException("Synthetic transport timeout.");
+                        if(scenario=="NetworkError") throw new HttpRequestException("Synthetic network failure.");
+                        return Task.FromResult(new System.Net.Http.HttpResponseMessage(
+                            System.Net.HttpStatusCode.Unauthorized));
+                    }));
+                    using var http=new HttpClient(guard) {
+                        BaseAddress=new Uri("https://synthetic.invalid")
+                    };
+                    var url="/activity-service/activity/123/exerciseSets";
+                    try {
+                        using var first=await http.PutAsync(url,new StringContent("{}"));
+                    }
+                    catch(Exception ex) when(ex is HttpRequestException or TaskCanceledException) {}
+                    var blocked=false;
+                    try {
+                        using var second=await http.PutAsync(url,new StringContent("{}"));
+                    }
+                    catch(InvalidOperationException) {blocked=true;}
+                    if(!blocked || physicalSends!=1 || guard.PutAttempts!=2)
+                        throw new InvalidOperationException("Single PUT guard failed: "+scenario);
+                    Console.WriteLine("PASS: HTTP guard "+scenario+" allows one physical PUT; retry blocked.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
@@ -536,6 +563,11 @@ internal static class GarminUncertainIsolationTest
                 try { File.Delete(path+suffix); } catch(IOException) { /* test artifact only */ }
             }
         }
+    }
+
+    private sealed class FakeGarminTransport(Func<HttpRequestMessage,CancellationToken,Task<HttpResponseMessage>> send) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct) => send(request,ct);
     }
 
     private static string BuildSyntheticSets(long activityId)
