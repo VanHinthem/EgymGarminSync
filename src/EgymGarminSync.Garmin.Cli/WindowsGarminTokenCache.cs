@@ -6,6 +6,7 @@ using Garmin.Connect.Auth;
 namespace EgymGarminSync.Garmin.Cli;
 
 /// <summary>Per-Windows-user encrypted OAuth cache. Never persists passwords or plaintext tokens.</summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsGarminTokenCache : ITokenCache
 {
     private readonly string _path;
@@ -60,6 +61,19 @@ public sealed class WindowsGarminTokenCache : ITokenCache
             // Do not silently overwrite an unreadable cache: it may be a permissions or account change.
             throw new InvalidOperationException("Cannot read protected Garmin token cache. Check Windows user and file permissions; do not share the cache.", ex);
         }
+    }
+
+    /// <summary>Offline metadata only; never exposes any OAuth token material.</summary>
+    public GarminTokenCacheStatus ReadStatus()
+    {
+        var expires = _tokens.OAuth2ExpiresAtUtc;
+        var present = _tokens.OAuth2 is not null;
+        var status = !present ? "Absent" :
+            expires == default ? "ExpiryUnknown" :
+            expires <= DateTimeOffset.UtcNow ? "Expired" :
+            expires <= DateTimeOffset.UtcNow.AddSeconds(60) ? "WithinSafetyMargin" : "Usable";
+        return new GarminTokenCacheStatus(_tokens.OAuth1 is not null, present,
+            status, expires == default ? null : expires);
     }
 
     public async Task<OAuth2Token?> GetOAuth2Token(CancellationToken cancellationToken)
@@ -131,3 +145,7 @@ public sealed class WindowsGarminTokenCache : ITokenCache
         public DateTimeOffset OAuth2ExpiresAtUtc { get; set; }
     }
 }
+
+/// <summary>Non-secret local cache metadata.</summary>
+public sealed record GarminTokenCacheStatus(bool OAuth1Present, bool OAuth2Present,
+    string OAuth2Status, DateTimeOffset? OAuth2ExpiresAtUtc);

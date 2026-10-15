@@ -1,9 +1,22 @@
+using EgymGarminSync.Matching;
 using System.Text.Json;
 using EgymGarminSync.Garmin.Cli;
 using Garmin.Connect;
 using Garmin.Connect.Auth;
 using Garmin.Connect.Auth.External;
 using Garmin.Connect.Parameters;
+
+if (args.Length == 2 && args[0].Equals("--offline-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    return await OneRepetitionRestore.RunAsync(null, execute: false, args[1]);
+
+if (args.Contains("--offline-preflight-aug31", StringComparer.OrdinalIgnoreCase))
+    return await OfflineSnapshotPreflight.RunAsync();
+
+if (!OperatingSystem.IsWindows())
+{
+    Console.Error.WriteLine("Garmin CLI currently requires Windows for its DPAPI token cache.");
+    return 1;
+}
 
 var email = Environment.GetEnvironmentVariable("GARMIN_EMAIL");
 var password = Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
@@ -13,10 +26,41 @@ if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
     return 1;
 }
 
+if (args.Length == 1 && args[0].Equals("--token-cache-status", StringComparison.OrdinalIgnoreCase))
+{
+    // Offline-only: no HttpClient, GarminConnectContext, or Garmin API calls.
+    try
+    {
+        var cache = new WindowsGarminTokenCache(email);
+        var cooldown = cache.IsInLoginCooldown(out var retryAfterUtc);
+        var oauth1 = await cache.GetOAuth1Token(CancellationToken.None);
+        var metadata = cache.ReadStatus();
+        var oauth2 = await cache.GetOAuth2Token(CancellationToken.None);
+        Console.WriteLine("Garmin local token cache (offline, read-only):");
+        Console.WriteLine($"OAuth1 present: {oauth1 is not null}");
+        Console.WriteLine($"OAuth2 present: {metadata.OAuth2Present}");
+        Console.WriteLine($"OAuth2 status: {metadata.OAuth2Status}");
+        Console.WriteLine($"OAuth2 usable (>60s remaining): {oauth2 is not null}");
+        if (metadata.OAuth2ExpiresAtUtc is { } expires)
+            Console.WriteLine($"OAuth2 expires (local time): {expires.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine($"Login cooldown active: {cooldown}");
+        if (cooldown)
+            Console.WriteLine($"Retry after (local time): {retryAfterUtc.ToLocalTime():yyyy-MM-dd HH:mm}");
+        Console.WriteLine("Note: OAuth2 unusable may mean absent, expired or within the 60-second safety margin.");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        // Avoid printing exception messages, which can contain private paths or upstream data.
+        Console.Error.WriteLine($"Offline token-cache inspection failed: {ex.GetType().Name}.");
+        return 1;
+    }
+}
+
 WindowsGarminTokenCache? tokenCache = null;
 try
 {
-    using var http = new HttpClient();
+    using var http = new HttpClient(GarminIpv4Transport.Create());
     tokenCache = new WindowsGarminTokenCache(email);
     if (tokenCache.IsInLoginCooldown(out var retryAfterUtc))
     {
@@ -26,6 +70,214 @@ try
     var context = new GarminConnectContext(http, new BasicAuthParameters(email, password), new NotImplementedMfaCode(), tokenCache);
     Console.WriteLine("Using Windows DPAPI encrypted Garmin OAuth token cache.");
     var client = new GarminConnectClient(context);
+    if (args.Contains("--snapshot-test-activity", StringComparer.OrdinalIgnoreCase))
+    {
+        var index = Array.FindIndex(args, a => a.Equals("--snapshot-test-activity", StringComparison.OrdinalIgnoreCase));
+        if (args.Length != 2 || index != 0 ||
+            !long.TryParse(args[1], out var testId) || testId <= 0 ||
+            testId is 24180037460 or 23883291887)
+        {
+            Console.Error.WriteLine("Usage: --snapshot-test-activity <positive disposable Garmin activity ID>; known historical examples are forbidden.");
+            return 1;
+        }
+        // Fail closed unless this ID is visible in the recent activity list and is not EGYM.
+        // Naming alone cannot prove disposability: the user must have created it expressly for this trial.
+        var recentActivities = await client.GetActivities(0, 100);
+        var selected = recentActivities.SingleOrDefault(a => a.ActivityId == testId);
+        if (selected is null ||
+            selected.ActivityName.Contains("EGYM", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Test activity not found among recent activities or is labeled EGYM; no snapshot made.");
+            return 1;
+        }
+        Console.WriteLine("GET-only snapshot. Ensure this is a deliberately created disposable test activity.");
+        var result = await GarminActivitySnapshot.RunAsync(context, testId);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 2 && args[0].Equals("--live-restore-one-repetition", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await OneRepetitionRestore.RunAsync(context, execute: true, args[1]);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--live-trial-one-repetition", StringComparison.OrdinalIgnoreCase))
+    {
+        // No write occurs without entering the exact activity-specific confirmation.
+        var result = await OneRepetitionLiveTrial.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--metadata-diff-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31MetadataDiff.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--apply-weights-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31FullWeightCorrection.RunAsync(context, restore: false);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--restore-weights-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31FullWeightCorrection.RunAsync(context, restore: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--live-test-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31LiveWeightTrial.RunAsync(context, restore: false);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--live-restore-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        var result = await Aug31LiveWeightTrial.RunAsync(context, restore: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--trial-preflight-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        if (args.Length != 1)
+        {
+            Console.Error.WriteLine("Usage: --trial-preflight-aug31");
+            return 1;
+        }
+        var result = await Aug31OneSetTrialDiagnostic.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--refresh-preview-aug31", StringComparison.OrdinalIgnoreCase))
+    {
+        // Two-phase GET-only workflow. Fail without preview when a fresh snapshot fails.
+        var backupResult = await GarminActivitySnapshot.RunAsync(context);
+        if (backupResult != 0) return backupResult;
+        Console.WriteLine("Fresh snapshot captured. Checking local weight-only proposal...");
+        var previewResult = await OfflineSnapshotPreflight.RunAsync();
+        if (previewResult == 0) tokenCache.ClearLoginCooldown();
+        return previewResult;
+    }
+    if (args.Contains("--backup-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await GarminActivitySnapshot.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--cycling-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await CyclingReadOnlyDiagnostic.RunAsync(context);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--weight-preview-aug31", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await CombinedReadOnlyDiagnostic.RunAsync(context, client,
+            new DateOnly(2026, 8, 31), 24180037460L, previewWeights: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Length == 1 && args[0].Equals("--history-remaining", StringComparison.OrdinalIgnoreCase))
+    {
+        // GET-only: enumerate matched historical sessions except the verified Aug31 correction.
+        var result = await HistoricalComparisonDiagnostic.RunAsync(context, client,
+            maxSessions: 30, excludeCorrectedAugust31: true);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--history-compare", StringComparer.OrdinalIgnoreCase))
+    {
+        // Initially cap historical exercise-set GET requests. Optional second argument
+        // allows a small first validation run before inspecting all matched sessions.
+        var commandIndex = Array.FindIndex(args, arg => arg.Equals("--history-compare", StringComparison.OrdinalIgnoreCase));
+        var max = 5;
+        if (commandIndex + 1 < args.Length &&
+            (!int.TryParse(args[commandIndex + 1], out max) || max is < 1 or > 30))
+        {
+            Console.Error.WriteLine("Use --history-compare [1..30] to limit session inspections.");
+            return 1;
+        }
+        var result = await HistoricalComparisonDiagnostic.RunAsync(context, client, max);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--history-match", StringComparer.OrdinalIgnoreCase))
+    {
+        var result = await HistoricalMatchingDiagnostic.RunAsync(client, 180);
+        if (result == 0) tokenCache.ClearLoginCooldown();
+        return result;
+    }
+    if (args.Contains("--compare-aug31", StringComparer.OrdinalIgnoreCase) ||
+        args.Contains("--compare-aug07", StringComparer.OrdinalIgnoreCase))
+    {
+        var positive = args.Contains("--compare-aug07", StringComparer.OrdinalIgnoreCase);
+        var exitCode = await CombinedReadOnlyDiagnostic.RunAsync(context, client,
+            positive ? new DateOnly(2026, 8, 7) : new DateOnly(2026, 8, 31),
+            positive ? 23883291887L : 24180037460L);
+        if (exitCode == 0) tokenCache.ClearLoginCooldown();
+        return exitCode;
+    }
+    if (args.Length == 1 && (args[0].Equals("--auth-trace", StringComparison.OrdinalIgnoreCase) ||
+        args[0].Equals("--auth-trace-ipv4", StringComparison.OrdinalIgnoreCase)))
+    {
+        // Explicit diagnostic: one Garmin GET only. Logs do not contain HTTP headers, URLs or token bodies.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var probe = new GarminAuthTraceTokenCache(tokenCache);
+        var ipv4Only = args[0].Equals("--auth-trace-ipv4", StringComparison.OrdinalIgnoreCase);
+        using HttpMessageHandler transport = ipv4Only ? GarminIpv4Transport.Create() : new HttpClientHandler();
+        using var traceHttp = new HttpClient(new GarminHttpTraceHandler(transport));
+        var traceContext = new GarminConnectContext(traceHttp,
+            new BasicAuthParameters(email, password), new NotImplementedMfaCode(), probe);
+        var traceClient = new GarminConnectClient(traceContext);
+        try
+        {
+            Console.WriteLine(ipv4Only
+                ? "Garmin auth trace: IPv4-only transport, one read-only activity request."
+                : "Garmin auth trace: default transport, one read-only activity request.");
+            var activities = await traceClient.GetActivities(0, 1);
+            Console.WriteLine($"SUCCESS: activities={activities.Length}; elapsedMs={watch.ElapsedMilliseconds}; cacheEvents={probe.EventSummary}");
+            tokenCache.ClearLoginCooldown();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FAILED: type={ex.GetType().Name}; elapsedMs={watch.ElapsedMilliseconds}; cacheEvents={probe.EventSummary}");
+            return 1;
+        }
+    }
+    if (args.Length == 1 && args[0].Equals("--matching-times-10", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("Read-only Garmin discovery: requesting at most 10 recent activities.");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var activities = await client.GetActivities(0, 10);
+            Console.WriteLine($"SUCCESS: received {activities.Length} activities in {watch.ElapsedMilliseconds} ms.");
+            tokenCache.ClearLoginCooldown();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            // Exception messages can contain private URLs or account data.
+            Console.Error.WriteLine($"FAILED: {ex.GetType().Name} after {watch.ElapsedMilliseconds} ms.");
+            return 1;
+        }
+    }
+    if (args.Contains("--matching-times", StringComparer.OrdinalIgnoreCase))
+    {
+        Console.WriteLine("Read-only Garmin EGYM activity timestamps (GMT from Garmin):");
+        var activities = await client.GetActivities(0, 100);
+        tokenCache.ClearLoginCooldown();
+        foreach (var activity in activities.Where(a => a.ActivityName is "EGYM Positief" or "EGYM Negatief"))
+        {
+            // Garmin's startTimeGMT is represented as DateTime without an offset.
+            // Attach UTC explicitly, never implicitly convert using the computer timezone.
+            var utcStart = DateTime.SpecifyKind(activity.StartTimeGmt, DateTimeKind.Utc);
+            Console.WriteLine($"  {activity.ActivityId} | {activity.ActivityName} | startUtc={utcStart:O} | durationSeconds={activity.Duration:F0}");
+        }
+        return 0;
+    }
     Console.WriteLine("Step 1: listing Garmin workouts...");
     var workouts = await client.GetWorkouts(new WorkoutsParameters { Start = 0, Limit = 100 });
     Console.WriteLine($"Step 1 OK: {workouts.Length} workouts");
@@ -70,6 +322,14 @@ try
             var sets = await context.GetAndDeserialize<JsonElement>($"/activity-service/activity/{id}/exerciseSets");
             Console.WriteLine("  Exercise-set response root keys: " + SafeKeys(sets));
             PrintActivitySets(sets);
+            if (args.Contains("--circuit-check", StringComparer.OrdinalIgnoreCase))
+            {
+                var countRecords = CircuitJsonNormalizer.GarminCounts(sets);
+                var expectedIds = new long[] { 333, 334, 581, 330, 335, 329, 331, 332 };
+                var expected = expectedIds.Select(id => ExerciseIdentityMapping.TryGetGarminKey(id, out var key) ? key : null).ToArray();
+                var valid = expected.All(key => key is not null && countRecords.Count(x => x.Category == key.Category && x.ExerciseName == key.ExerciseName) == 2) && countRecords.Count == 16;
+                Console.WriteLine($"    Garmin circuit completeness: 16 strength records expected; actual={countRecords.Count}; twoSetsEach={valid}");
+            }
         }
         catch (Exception ex)
         {
