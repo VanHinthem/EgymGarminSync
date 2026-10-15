@@ -142,7 +142,7 @@ internal static class GarminUncertainIsolationTest
                         new[] { new SetFieldEdit(2,"repetitionCount",15,13) }),
                         Activity:syntheticBackup.ActivityJson, Decision:"Uncertain", Metadata:true),
                     (Name:"BadMetadata", Sets:changedSets,
-                        Activity:"{\\"activityId\\":123}", Decision:"Uncertain", Metadata:false)
+                        Activity:"""{"activityId":123}""", Decision:"Uncertain", Metadata:false)
                 };
                 foreach(var testCase in liveTests)
                 {
