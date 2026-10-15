@@ -15,6 +15,8 @@ internal static class GarminUnifiedWriteWorkflow
         GarminGuardedWriteContextFactory.Scope guardedScope)
     {
         ArgumentNullException.ThrowIfNull(guardedScope);
+        if(!guardedScope.IsSyntheticTestContext)
+            throw new InvalidOperationException("Only isolated synthetic contexts are permitted.");
         GarminTransactionDryRun.Read read=async id=>
         {
             var activity=await guardedScope.Context.GetAndDeserialize<JsonElement>(
