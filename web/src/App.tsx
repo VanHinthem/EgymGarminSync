@@ -50,6 +50,7 @@ function App() {
   const [writing,setWriting] = useState(false)
   const [writeAttempted,setWriteAttempted] = useState(false)
   const [liveRows,setLiveRows] = useState<SetRow[]>([])
+  const [cacheRevision,setCacheRevision] = useState(0)
   const [warnings,setWarnings] = useState<string[]>([])
   const [setsLoading,setSetsLoading] = useState(false)
   const [setsError,setSetsError] = useState('')
@@ -92,7 +93,7 @@ function App() {
     }
     void scan()
     return ()=>{cancelled=true}
-  },[mode,egym,garmin])
+  },[mode,egym,garmin,cacheRevision])
   function statusLabel(id:string){
     switch(sessionStatuses[id]){
       case 'different':return '· Afwijkingen'
@@ -129,7 +130,7 @@ function App() {
       .catch(err=>{if(!abort.signal.aborted)setSetsError(err instanceof Error?err.message:'Onbekende fout')})
       .finally(()=>{if(!abort.signal.aborted)setSetsLoading(false)})
     return ()=>abort.abort()
-  },[mode,selectedEgym,selectedGarmin])
+  },[mode,selectedEgym,selectedGarmin,cacheRevision])
   const changeList = useMemo(()=>displayedRows.flatMap(row=>{
     const state = draft[row.id] ?? {}
     const result: string[]=[]
@@ -236,7 +237,7 @@ function App() {
       setPreviewResult(result?.status==='Verified'
         ? 'Wijzigingen opgeslagen in Garmin en gecontroleerd. Je lokale gegevens zijn bijgewerkt.'
         : 'Garmin-opslag gaf geen bevestigde eindstatus.')
-      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setWriteAttempted(false)}
+      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setWriteAttempted(false);setCacheRevision(v=>v+1)}
     }catch{setPreviewResult('Garmin-opslag niet bereikbaar. Controleer het journal voordat je opnieuw iets doet.')}
     finally{setWriting(false)}
   }
