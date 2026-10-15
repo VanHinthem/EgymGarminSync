@@ -565,9 +565,9 @@ internal static class GarminUncertainIsolationTest
                     };
                     var tokenCache=new FakeGarminTokenCache(token);
                     var sdkContext=new global::Garmin.Connect.GarminConnectContext(
-                        sdkHttp,new global::Garmin.Connect.Parameters.BasicAuthParameters(
+                        sdkHttp,new global::Garmin.Connect.Auth.BasicAuthParameters(
                             "synthetic@example.invalid","synthetic-password"),
-                        new global::Garmin.Connect.Auth.External.NotImplementedMfaCode(),tokenCache);
+                        new global::Garmin.Connect.Auth.NotImplementedMfaCode(),tokenCache);
                     try
                     {
                         using var fakePayload=JsonDocument.Parse("{}");
