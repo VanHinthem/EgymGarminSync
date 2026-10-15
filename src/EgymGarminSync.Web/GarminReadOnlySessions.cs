@@ -10,7 +10,7 @@ internal static class GarminReadOnlySessions
 {
     public static async Task<IResult> GetAsync(ILoggerFactory loggerFactory)
     {
-        if (!OperatingSystem.IsWindows())
+        if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Garmin authentication currently requires Windows DPAPI.", statusCode: 501);
         var email = Environment.GetEnvironmentVariable("GARMIN_EMAIL");
         var password = Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
@@ -21,7 +21,7 @@ internal static class GarminReadOnlySessions
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var cache = new WindowsGarminTokenCache(email);
+            var cache = new GarminTokenCacheProvider(email);
             if (cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown is active; try again later.", statusCode: 429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
