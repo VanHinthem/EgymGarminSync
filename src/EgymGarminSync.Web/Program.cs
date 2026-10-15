@@ -93,7 +93,11 @@ using (var scope = app.Services.CreateScope())
 }
 app.UseCors("LocalUi");
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", writeEnabled = false, database = "SQLite" }));
+app.MapGet("/api/health", () => Results.Ok(new {
+    status = "ok",
+    writeEnabled = GarminWriteTransportAdapter.LiveWriteEnabled,
+    database = "SQLite"
+}));
 app.MapPost("/api/cache/import-initial", (SyncDbContext db) => InitialCacheImport.ImportAsync(db));
 app.MapPost("/api/cache/sync", (SyncDbContext db) => InitialCacheImport.ImportAsync(db, incremental: true));
 app.MapGet("/api/cache/sessions", async (string? source, SyncDbContext db) =>
@@ -203,8 +207,12 @@ app.MapPost("/api/sync/write-simulate", GarminWriteSimulation.RunAsync);
 app.MapPost("/api/sync/journal-transition-test", GarminJournalLifecycle.TransitionAsync);
 app.MapPost("/api/sync/reconcile-simulate", GarminReconciliation.SimulateAsync);
 app.MapPost("/api/sync/reconcile-live-readonly", GarminLiveReconciliation.ReadAsync);
+app.MapPost("/api/sync/write", GarminLiveWriteEndpoint.ExecuteAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
-    "Garmin writes are disabled in this first web slice.", statusCode: 501));
+    GarminWriteTransportAdapter.LiveWriteEnabled
+        ? "Use the explicit /api/sync/write endpoint with exact journal/payload approval."
+        : "Garmin writes are disabled in source code.",
+    statusCode: 501));
 
 app.Run();
