@@ -82,6 +82,7 @@ internal sealed class GarminWriteJournal
     public DateTimeOffset CreatedUtc { get; set; }
     public DateTimeOffset UpdatedUtc { get; set; }
     public string? ErrorCode { get; set; }
+    public string? OperationId { get; set; }
 }
 
 internal sealed class GarminWritePayload
