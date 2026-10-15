@@ -70,12 +70,15 @@ internal static class GarminTransactionDryRun
             return "Blocked";
         }
 
+        var operationId=Guid.NewGuid().ToString("N");
+
         // Persist intent *before* invoking the injected writer. Once this commit
         // succeeds, any exception or process termination requires reconciliation.
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
             var tracked = await db.WriteJournal.SingleAsync(x => x.Id == journalId);
             if (tracked.Status != "Ready") return "Blocked";
+            tracked.OperationId=operationId;
             tracked.Status = "WriteStarted";
             tracked.UpdatedUtc = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
@@ -98,7 +101,8 @@ internal static class GarminTransactionDryRun
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
             var tracked = await db.WriteJournal.SingleAsync(x => x.Id == journalId);
-            if (tracked.Status != "WriteStarted") return "Uncertain";
+            if (tracked.Status != "WriteStarted" || tracked.OperationId != operationId)
+                return "Uncertain";
             tracked.Status = result;
             tracked.ErrorCode = result == "Uncertain" ? "SYNTHETIC_WRITE_UNKNOWN" : null;
             tracked.UpdatedUtc = DateTimeOffset.UtcNow;
