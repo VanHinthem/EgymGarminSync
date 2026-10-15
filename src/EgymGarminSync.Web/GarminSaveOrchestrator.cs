@@ -91,17 +91,42 @@ internal static class GarminSaveOrchestrator
                 ActivityJson=activity, ActivitySha256=Hash(activity),
                 ExerciseSetsJson=sets, SetsSha256=Hash(sets)
             };
+            // A write attempt left in an uncertain or pending state blocks further
+            // preparation. This guard is backed by a SQLite partial unique index,
+            // not merely by the in-process semaphore.
+            if (await db.WriteJournal.AnyAsync(x => x.GarminActivityId == request.GarminId &&
+                (x.Status == "Preparing" || x.Status == "Ready" ||
+                 x.Status == "WriteStarted" || x.Status == "Uncertain")))
+                return Results.Conflict(new { error = "An unresolved Garmin write exists. Inspect the journal; no automatic retry." });
+
+            await using var transaction = await db.Database.BeginTransactionAsync();
             db.GarminSnapshots.Add(backup);
             await db.SaveChangesAsync();
+            var journal = new GarminWriteJournal {
+                GarminActivityId = request.GarminId,
+                ApprovedSnapshotId = request.SnapshotId,
+                FreshSnapshotId = backup.Id,
+                Status = "DryRunVerified",
+                OriginalSha256 = Hash(sets),
+                CandidateSha256 = Hash(candidate),
+                ProposedPayloadSha256 = Hash(normalized),
+                RecoveryPayloadSha256 = Hash(recovery),
+                CreatedUtc = DateTimeOffset.UtcNow,
+                UpdatedUtc = DateTimeOffset.UtcNow
+            };
+            db.WriteJournal.Add(journal);
+            await db.SaveChangesAsync();
+            await transaction.CommitAsync();
             tokenCache.ClearLoginCooldown();
             return Results.Ok(new {
                 readOnly=true, canWrite=false, activityId=request.GarminId,
                 sourceBackupId=request.SnapshotId, freshBackupId=backup.Id,
+                journalId=journal.Id, journalStatus=journal.Status,
                 fieldsChanged=edits.Count(e=>e.Expected!=e.Value),
                 originalSha256=Hash(sets), candidateSha256=Hash(candidate),
                 normalizedSha256=Hash(normalized), recoverySha256=Hash(recovery),
                 concurrencyCheckPassed=true, restoreContractValid=true,
-                message="Fresh live state verified and immutable preparation backup saved. NO PUT. A future write must repeat the final state check and independently verify readback."
+                message="Fresh live state verified and immutable backup plus dry-run journal recorded. NO PUT."
             });
         }
         catch (InvalidOperationException)
