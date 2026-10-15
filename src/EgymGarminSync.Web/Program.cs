@@ -5,6 +5,12 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
+if (args.Contains("--test-uncertain-isolation", StringComparer.Ordinal))
+{
+    Environment.ExitCode = await GarminUncertainIsolationTest.RunAsync();
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://127.0.0.1:5187");
 builder.Services.AddCors(options => options.AddPolicy("LocalUi", policy =>
