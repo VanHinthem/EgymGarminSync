@@ -637,6 +637,45 @@ internal static class GarminUncertainIsolationTest
                             "OAuth refresh retry was not intercepted by the guarded SDK.");
                     Console.WriteLine("PASS: SDK 401 -> successful OAuth refresh -> second PUT blocked; one physical PUT.");
                 }
+                // Factory integration: the actual SDK is always constructed with
+                // a per-attempt guard. Repeated SDK PUT must not hit transport.
+                {
+                    var sendsThroughFactory=0;
+                    using var scope=GarminGuardedWriteContextFactory.Create(
+                        new FakeGarminTransport((request,ct)=>{
+                            sendsThroughFactory++;
+                            return Task.FromResult(new HttpResponseMessage(
+                                System.Net.HttpStatusCode.OK));
+                        }),
+                        new global::Garmin.Connect.Auth.BasicAuthParameters(
+                            "synthetic@example.invalid","synthetic-password"),
+                        new global::Garmin.Connect.Auth.NotImplementedMfaCode(),
+                        new FakeGarminTokenCache(new global::Garmin.Connect.Auth.OAuth2Token {
+                            AccessToken="synthetic",TokenType="Bearer",ExpiresIn=3600
+                        }));
+                    using(var body=JsonDocument.Parse("{}"))
+                    using(var response=await scope.Context.MakeHttpPut(
+                        "/activity-service/activity/123/exerciseSets",body.RootElement))
+                    {
+                        if(!response.IsSuccessStatusCode)
+                            throw new InvalidOperationException("First factory PUT did not succeed.");
+                    }
+                    var refusedByFactory=false;
+                    try
+                    {
+                        using var body=JsonDocument.Parse("{}");
+                        using var response=await scope.Context.MakeHttpPut(
+                            "/activity-service/activity/123/exerciseSets",body.RootElement);
+                    }
+                    catch(InvalidOperationException ex) when(
+                        ex.Message.Contains("Blocked repeated Garmin exerciseSets PUT."))
+                    {
+                        refusedByFactory=true;
+                    }
+                    if(!refusedByFactory || sendsThroughFactory!=1 || scope.Guard.PutAttempts!=2)
+                        throw new InvalidOperationException("Factory allowed a duplicate PUT.");
+                    Console.WriteLine("PASS: guarded write context factory allows one SDK PUT; repeat blocked.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
