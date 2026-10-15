@@ -14,5 +14,7 @@ services:
       EGYM_PASSWORD: ${EGYM_PASSWORD}
       GARMIN_EMAIL: ${GARMIN_EMAIL}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD}
+      GARMIN_TOKEN_KEY: ${GARMIN_TOKEN_KEY:?Generate a persistent 32-byte Base64 token encryption key}
       GARMIN_WRITE_ENABLED: "0"
-    # IMPORTANT: Linux Garmin OAuth cache is not yet supported. See README.
+      GARMIN_LINUX_WRITE_ENABLED: "0"
+    # Keep GARMIN_TOKEN_KEY safe and unchanged across deployments; losing it makes the cached tokens unreadable.
