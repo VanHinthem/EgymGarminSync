@@ -119,6 +119,24 @@ function App() {
       setPreviewResult(`Schrijfvoorbereiding #${result.journalId} staat Ready. Exacte payload is opgeslagen; er is nog geen PUT uitgevoerd.`)
     }catch{setPreviewResult('Schrijfvoorbereiding niet bereikbaar. Niets naar Garmin geschreven.')}
   }
+  async function resumeWritePlan(){
+    if(mode!=='live'||!selectedGarmin)return
+    try{
+      const [journalResponse,healthResponse]=await Promise.all([
+        fetch(`/api/sync/write-journal/${selectedGarmin}`),
+        fetch('/api/health')
+      ])
+      if(!journalResponse.ok||!healthResponse.ok)throw new Error('API niet bereikbaar')
+      const journal=await journalResponse.json() as {records:{id:number;status:string;candidateSha256:string;proposedPayloadSha256:string}[]}
+      const health=await healthResponse.json() as {writeEnabled:boolean}
+      const ready=journal.records.find(r=>r.status==='Ready')
+      if(!ready){setPreviewResult('Geen Ready schrijfvoorbereiding gevonden.');return}
+      setWritePlan({journalId:ready.id,candidateSha256:ready.candidateSha256,
+        outgoingSha256:ready.proposedPayloadSha256,canWrite:health.writeEnabled})
+      setConfirmation('');setReview(true)
+      setPreviewResult(`Schrijfvoorbereiding #${ready.id} geladen. Controleer de exacte wijziging en bevestiging.`)
+    }catch{setPreviewResult('Kon de voorbereiding niet laden.')}
+  }
   async function executeWrite(){
     if(!writePlan)return
     const activityId=Number(selectedGarmin)
@@ -178,6 +196,7 @@ function App() {
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen</option>)}</select></article>
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
     </section>
+    {mode==='live'&&selectedGarmin==='24006250902'&&<button className="secondary" onClick={()=>void resumeWritePlan()}>Bestaande schrijfvoorbereiding laden / status controleren</button>}
     <section className="comparison panel"><div className="compareHeader"><div><div className="eyebrow">VERGELIJKING</div><h2>Oefeningen en sets</h2><p>Neem gewicht en herhalingen afzonderlijk over van EGYM naar Garmin.</p></div><span className="count">{changeList.length} voorbereid</span></div>
       {setsError&&<div className="warning">{setsError}</div>}
       {warnings.length>0&&<div className="notice">{warnings.join(' · ')}</div>}
