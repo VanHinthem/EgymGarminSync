@@ -7,7 +7,7 @@ namespace EgymGarminSync.Garmin.Cli;
 /// Isolated Garmin exercise-set replacement transport. Not currently wired to a CLI action.
 /// The Garmin endpoint replaces the entire exerciseSets collection, not one set.
 /// </summary>
-internal static class GarminExerciseSetsReplaceTransport
+public static class GarminExerciseSetsReplaceTransport
 {
     internal static string Endpoint(long activityId)
     {
@@ -21,7 +21,7 @@ internal static class GarminExerciseSetsReplaceTransport
     /// This method does not implement application-level retries, restoration or post-write verification.
     /// The underlying Garmin client may retry after an authentication challenge.
     /// </summary>
-    internal static async Task ReplaceAsync(GarminConnectContext context, long activityId,
+    public static async Task ReplaceAsync(GarminConnectContext context, long activityId,
         JsonElement validatedCompletePayload, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
