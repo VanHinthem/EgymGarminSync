@@ -329,9 +329,13 @@ internal static class GarminUncertainIsolationTest
                 crashTracked.Status="WriteStarted";
                 await reopened.SaveChangesAsync();
                 reopened.ChangeTracker.Clear();
-                if(await GarminCrashRecovery.RecoverAsync(reopened)!=1)
+                if(await GarminCrashRecovery.RecoverAsync(reopened)!=0 ||
+                    (await reopened.WriteJournal.AsNoTracking().SingleAsync(x=>x.Id==crashEntry.Id)).Status!="WriteStarted")
+                    throw new InvalidOperationException("Startup interfered with a possible active writer.");
+                Console.WriteLine("PASS: second API startup preserves possibly active WriteStarted.");
+                if(await GarminCrashRecovery.RecoverAsync(reopened,exclusiveWriterShutdownConfirmed:true)!=1)
                     throw new InvalidOperationException("Crash recovery count incorrect.");
-                if(await GarminCrashRecovery.RecoverAsync(reopened)!=0)
+                if(await GarminCrashRecovery.RecoverAsync(reopened,exclusiveWriterShutdownConfirmed:true)!=0)
                     throw new InvalidOperationException("Crash recovery was not idempotent.");
                 var recovered=await reopened.WriteJournal.AsNoTracking()
                     .SingleAsync(x=>x.Id==crashEntry.Id);
