@@ -29,9 +29,13 @@ internal static class GarminTransactionDryRun
         long journalId, Read read, Write write) =>
         ExecuteCoreAsync(db,activityId,journalId,read,write,true,false);
 
-    internal static Task<string> ExecuteApprovedIsolationAsync(SyncDbContext db,long activityId,
+    internal static Task<string> ExecuteApprovedVerifiedAsync(SyncDbContext db,long activityId,
         long journalId,Read read,Write write) =>
         ExecuteCoreAsync(db,activityId,journalId,read,write,true,true);
+
+    internal static Task<string> ExecuteApprovedIsolationAsync(SyncDbContext db,long activityId,
+        long journalId,Read read,Write write) =>
+        ExecuteApprovedVerifiedAsync(db,activityId,journalId,read,write);
 
     private static async Task<string> ExecuteCoreAsync(SyncDbContext db, long activityId,
         long journalId, Read read, Write write, bool isolatedVerified, bool requireApproval)
