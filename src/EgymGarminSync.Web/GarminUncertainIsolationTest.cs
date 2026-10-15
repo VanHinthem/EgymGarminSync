@@ -538,12 +538,12 @@ internal static class GarminUncertainIsolationTest
                         using var first=await http.PutAsync(url,new StringContent("{}"));
                     }
                     catch(Exception ex) when(ex is HttpRequestException or TaskCanceledException) {}
-                    var blocked=false;
+                    var secondPutBlocked=false;
                     try {
-                        using var second=await http.PutAsync(url,new StringContent("{}"));
+                        using var retryResponse=await http.PutAsync(url,new StringContent("{}"));
                     }
-                    catch(InvalidOperationException) {blocked=true;}
-                    if(!blocked || physicalSends!=1 || guard.PutAttempts!=2)
+                    catch(InvalidOperationException) {secondPutBlocked=true;}
+                    if(!secondPutBlocked || physicalSends!=1 || guard.PutAttempts!=2)
                         throw new InvalidOperationException("Single PUT guard failed: "+scenario);
                     Console.WriteLine("PASS: HTTP guard "+scenario+" allows one physical PUT; retry blocked.");
                 }
