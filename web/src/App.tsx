@@ -5,6 +5,7 @@ import './style.css'
 type Session = { id: string; completedAt: string | null; exerciseCount: number; method?: string | null; name?: string }
 type SetRow = { garminSetIndex?: number; id: string; exercise: string; egymExercise?: string; garminExercise?: string; set: number; egymKg: number; garminKg: number; egymReps: number; garminReps: number }
 type Draft = Record<string, { kg?: number; reps?: number }>
+type SessionStatus = 'checking' | 'different' | 'matching' | 'unmatched' | 'unknown'
 const exampleRows: SetRow[] = [
   {id:'cp1',exercise:'Chest Press',set:1,egymKg:21,garminKg:22,egymReps:15,garminReps:12},
   {id:'cp2',exercise:'Chest Press',set:2,egymKg:21,garminKg:22,egymReps:15,garminReps:15},
@@ -37,6 +38,7 @@ function App() {
   const [garmin,setGarmin] = useState<Session[]>(demoGarmin)
   const [draft,setDraft] = useState<Draft>({})
   const [differencesOnly,setDifferencesOnly] = useState(false)
+  const [sessionStatuses,setSessionStatuses] = useState<Record<string,SessionStatus>>({})
   const [error,setError] = useState('')
   const [loading,setLoading] = useState(false)
   const [lastSync,setLastSync] = useState<string | null>(null)
@@ -66,6 +68,42 @@ function App() {
     return nearby.length===1 && nearby[0].name===variant ? nearby[0].id : ''
   }
   const candidate = mode==='demo' ? demoGarmin.find(g=>g.completedAt?.slice(0,10)===current?.completedAt?.slice(0,10)) : garmin.find(g=>g.id===propose(current,garmin))
+  useEffect(()=>{
+    if(mode!=='live'||egym.length===0){setSessionStatuses({});return}
+    let cancelled=false
+    const recent=egym.slice(0,20)
+    setSessionStatuses(Object.fromEntries(recent.map(s=>[s.id,propose(s,garmin)?'checking':'unmatched'])))
+    // Cached comparisons only: no Garmin network requests, no writes.
+    async function scan(){
+      for(let index=0;index<recent.length;index+=4){
+        if(cancelled)return
+        const group=recent.slice(index,index+4).filter(s=>propose(s,garmin))
+        const results=await Promise.all(group.map(async session=>{
+          const match=propose(session,garmin)
+          try{
+            const response=await fetch(`/api/cache/compare?egymId=${encodeURIComponent(session.id)}&garminId=${encodeURIComponent(match)}`)
+            if(!response.ok)return [session.id,'unknown'] as const
+            const data=await response.json() as {rows:SetRow[];warnings:string[]}
+            if(data.warnings?.length||!data.rows?.length)return [session.id,'unknown'] as const
+            return [session.id,data.rows.some(r=>r.egymKg!==r.garminKg||r.egymReps!==r.garminReps)?'different':'matching'] as const
+          }catch{return [session.id,'unknown'] as const}
+        }))
+        if(!cancelled)setSessionStatuses(prev=>({...prev,...Object.fromEntries(results)}))
+      }
+    }
+    void scan()
+    return ()=>{cancelled=true}
+  },[mode,egym,garmin])
+  function statusLabel(id:string){
+    switch(sessionStatuses[id]){
+      case 'different':return '· Afwijkingen'
+      case 'matching':return '· Komt overeen'
+      case 'unmatched':return '· Geen unieke match'
+      case 'unknown':return '· Controle nodig'
+      case 'checking':return '· Controleren...'
+      default:return ''
+    }
+  }
   const displayedRows = mode==='demo' ? exampleRows : liveRows
   const differs = (row:SetRow) => row.egymKg!==row.garminKg || row.egymReps!==row.garminReps
   const differenceCount = displayedRows.filter(differs).length
@@ -230,7 +268,7 @@ function App() {
     {error && <div className="warning"><CircleAlert size={17}/>{error}</div>}
     {mode==='demo'&&<div className="notice"><CircleAlert size={17}/> Dit is een interactieve demo met voorbeeldgegevens. Live Garmin-data en synchronisatie zijn nog niet aangesloten.</div>}
     <section className="sessionGrid">
-      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen</option>)}</select></article>
+      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen {statusLabel(s.id)}</option>)}</select></article>
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
     </section>
     {mode==='live'&&selectedGarmin&&<button className="secondary" onClick={()=>void resumeWritePlan()}>Eerdere opslagvoorbereiding hervatten</button>}
