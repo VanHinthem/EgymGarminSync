@@ -236,4 +236,5 @@ app.MapPost("/api/sync", () => Results.Problem(
     statusCode: 501));
 
 app.Run();
-\ninternal sealed record GarminCancelRequest(long ActivityId, long JournalId);\n
+
+internal sealed record GarminCancelRequest(long ActivityId, long JournalId);
