@@ -251,9 +251,11 @@ internal static class GarminUncertainIsolationTest
                     };
                     reopened.WriteJournal.Add(trialJournal);
                     await reopened.SaveChangesAsync();
+                    if(!await GarminTransactionDryRun.PersistSyntheticPayloadAsync(reopened,
+                        trialActivityId,trialJournal.Id,trialCandidate,trialOutgoing))
+                        throw new InvalidOperationException("Durable payload persistence failed.");
                     await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
                         new(trialActivityId,trialJournal.Id,"Begin"),reopened),"Dry run Begin");
-                    GarminTransactionDryRun.SyntheticPayloads.Set(trialJournal.Id,trialCandidate,trialOutgoing);
                     var observed=trialSets;
                     var calls=0;
                     try
@@ -289,9 +291,7 @@ internal static class GarminUncertainIsolationTest
                         Console.WriteLine("PASS: simulated transaction "+scenario+
                             " -> "+expectedStatus+"; one synthetic write, duplicates refused.");
                     }
-                    finally {
-                        GarminTransactionDryRun.SyntheticPayloads.Remove(trialJournal.Id);
-                    }
+                    finally { /* Durable payload intentionally preserved for recovery. */ }
                 }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
