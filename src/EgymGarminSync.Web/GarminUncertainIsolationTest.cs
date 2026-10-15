@@ -129,6 +129,55 @@ internal static class GarminUncertainIsolationTest
                         throw new InvalidOperationException("Reconciliation mutated persistent state.");
                     Console.WriteLine("PASS: "+testCase.Key+" -> "+testCase.Value+"; journal remains Uncertain.");
                 }
+                var syntheticBackup=await reopened.GarminSnapshots.AsNoTracking()
+                    .SingleAsync(x=>x.Id==uncertain.FreshSnapshotId);
+                var changedSets=GarminSetFieldDraft.Apply(syntheticBackup.ExerciseSetsJson,
+                    new[] { new SetFieldEdit(2,"repetitionCount",15,14) });
+                var liveTests=new[] {
+                    (Name:"Original", Sets:syntheticBackup.ExerciseSetsJson,
+                        Activity:syntheticBackup.ActivityJson, Decision:"NotApplied", Metadata:true),
+                    (Name:"Candidate", Sets:changedSets,
+                        Activity:syntheticBackup.ActivityJson, Decision:"Verified", Metadata:true),
+                    (Name:"Different", Sets:GarminSetFieldDraft.Apply(syntheticBackup.ExerciseSetsJson,
+                        new[] { new SetFieldEdit(2,"repetitionCount",15,13) }),
+                        Activity:syntheticBackup.ActivityJson, Decision:"Uncertain", Metadata:true),
+                    (Name:"BadMetadata", Sets:changedSets,
+                        Activity:"{\\"activityId\\":123}", Decision:"Uncertain", Metadata:false)
+                };
+                foreach(var testCase in liveTests)
+                {
+                    var result=await GarminLiveReconciliation.EvaluateAsync(
+                        new(activityId,firstJournalId,new[] {
+                            new GarminReconciliation.Edit(2,"repetitionCount",15,14)
+                        }),reopened,
+                        _=>Task.FromResult(new GarminLiveReconciliation.Observation(
+                            testCase.Activity,testCase.Sets)));
+                    if(result is not IValueHttpResult typed ||
+                        result is not IStatusCodeHttpResult {StatusCode:200})
+                        throw new InvalidOperationException("GET-only "+testCase.Name+" rejected.");
+                    using var json=JsonDocument.Parse(JsonSerializer.Serialize(typed.Value));
+                    var response=json.RootElement;
+                    if(response.GetProperty("decision").GetString()!=testCase.Decision ||
+                       response.GetProperty("metadataOk").GetBoolean()!=testCase.Metadata ||
+                       response.GetProperty("cacheUpdated").GetBoolean() ||
+                       response.GetProperty("garminPutAttempted").GetBoolean())
+                        throw new InvalidOperationException("GET-only "+testCase.Name+" incorrect.");
+                    Console.WriteLine("PASS: mocked GET "+testCase.Name+" -> "+testCase.Decision+".");
+                }
+                var failure=await GarminLiveReconciliation.EvaluateAsync(
+                    new(activityId,firstJournalId,new[] {
+                        new GarminReconciliation.Edit(2,"repetitionCount",15,14)
+                    }),reopened,_=>Task.FromException<GarminLiveReconciliation.Observation>(
+                        new HttpRequestException("Synthetic GET failure")));
+                if(failure is not IStatusCodeHttpResult {StatusCode:502})
+                    throw new InvalidOperationException("GET failure was not rejected.");
+                var afterLive=await reopened.WriteJournal.AsNoTracking()
+                    .SingleAsync(x=>x.Id==firstJournalId);
+                if(afterLive.Status!="Uncertain" ||
+                   await reopened.WriteJournal.CountAsync()!=initialJournalCount ||
+                   await reopened.GarminSets.CountAsync()!=initialCacheCount)
+                    throw new InvalidOperationException("Mock GET mutated persistent state.");
+                Console.WriteLine("PASS: mocked GET failure -> HTTP 502; journal stays Uncertain.");
                 Console.WriteLine("PASS: Uncertain persisted after reopened SQLite connection.");
                 Console.WriteLine("PASS: Second journal blocked and remained DryRunVerified.");
                 Console.WriteLine("PASS: Uncertain journal cannot be restarted.");
