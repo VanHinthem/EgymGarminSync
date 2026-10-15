@@ -65,6 +65,7 @@ using (var scope = app.Services.CreateScope())
         ON "WriteJournal" ("GarminActivityId")
         WHERE "Status" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')
         """);
+    await GarminCrashRecovery.RecoverAsync(database);
 }
 app.UseCors("LocalUi");
 
