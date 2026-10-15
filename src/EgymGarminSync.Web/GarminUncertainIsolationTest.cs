@@ -547,6 +547,39 @@ internal static class GarminUncertainIsolationTest
                         throw new InvalidOperationException("Single PUT guard failed: "+scenario);
                     Console.WriteLine("PASS: HTTP guard "+scenario+" allows one physical PUT; retry blocked.");
                 }
+                foreach(var scenario in new[] {"401","Timeout","NetworkError"})
+                {
+                    var observedPhysicalPuts=0;
+                    using var guardSdk=new GarminSinglePutGuard(new FakeGarminTransport((request,ct)=>{
+                        if(request.Method!=HttpMethod.Put ||
+                            request.RequestUri?.AbsolutePath!="/activity-service/activity/123/exerciseSets")
+                            throw new InvalidOperationException("Unexpected SDK authentication HTTP request blocked.");
+                        Interlocked.Increment(ref observedPhysicalPuts);
+                        if(scenario=="Timeout") throw new TaskCanceledException("Synthetic timeout.");
+                        if(scenario=="NetworkError") throw new HttpRequestException("Synthetic failure.");
+                        return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized));
+                    }));
+                    using var sdkHttp=new HttpClient(guardSdk);
+                    var token=new Garmin.Connect.Auth.OAuth2Token {
+                        AccessToken="synthetic-not-real",TokenType="Bearer",ExpiresIn=3600
+                    };
+                    var tokenCache=new FakeGarminTokenCache(token);
+                    var sdkContext=new Garmin.Connect.GarminConnectContext(
+                        sdkHttp,new Garmin.Connect.Parameters.BasicAuthParameters(
+                            "synthetic@example.invalid","synthetic-password"),
+                        new Garmin.Connect.Auth.External.NotImplementedMfaCode(),tokenCache);
+                    try
+                    {
+                        using var fakePayload=JsonDocument.Parse("{}");
+                        await sdkContext.MakeHttpPut(
+                            "/activity-service/activity/123/exerciseSets",fakePayload.RootElement);
+                    }
+                    catch(Exception) { /* expected: 401 auth refresh is locally refused; other scenarios fail */ }
+                    if(observedPhysicalPuts!=1 || guardSdk.PutAttempts!=1)
+                        throw new InvalidOperationException("SDK mock made unexpected physical PUT count: "+scenario);
+                    Console.WriteLine("PASS: GarminConnectContext "+scenario+
+                        " -> one physical PUT, no external HTTP.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
@@ -563,6 +596,19 @@ internal static class GarminUncertainIsolationTest
                 try { File.Delete(path+suffix); } catch(IOException) { /* test artifact only */ }
             }
         }
+    }
+
+    private sealed class FakeGarminTokenCache(Garmin.Connect.Auth.OAuth2Token token)
+        : Garmin.Connect.Auth.ITokenCache
+    {
+        public Task<Garmin.Connect.Auth.OAuth2Token?> GetOAuth2Token(
+            CancellationToken ct) => Task.FromResult<Garmin.Connect.Auth.OAuth2Token?>(token);
+        public Task SetOAuth2Token(Garmin.Connect.Auth.OAuth2Token value,
+            CancellationToken ct) => Task.CompletedTask;
+        public Task<Garmin.Connect.Auth.OAuth1Token?> GetOAuth1Token(
+            CancellationToken ct) => Task.FromResult<Garmin.Connect.Auth.OAuth1Token?>(null);
+        public Task SetOAuth1Token(Garmin.Connect.Auth.OAuth1Token value,
+            CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class FakeGarminTransport(Func<HttpRequestMessage,CancellationToken,Task<HttpResponseMessage>> send) : HttpMessageHandler
