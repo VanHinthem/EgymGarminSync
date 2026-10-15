@@ -28,6 +28,27 @@ using (var scope = app.Services.CreateScope())
             "FetchedUtc" TEXT NOT NULL
         )
         """);
+    await database.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "WriteJournal" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "GarminActivityId" INTEGER NOT NULL,
+            "ApprovedSnapshotId" INTEGER NOT NULL,
+            "FreshSnapshotId" INTEGER NOT NULL,
+            "Status" TEXT NOT NULL,
+            "OriginalSha256" TEXT NOT NULL,
+            "CandidateSha256" TEXT NOT NULL,
+            "ProposedPayloadSha256" TEXT NOT NULL,
+            "RecoveryPayloadSha256" TEXT NOT NULL,
+            "CreatedUtc" TEXT NOT NULL,
+            "UpdatedUtc" TEXT NOT NULL,
+            "ErrorCode" TEXT NULL
+        )
+        """);
+    await database.Database.ExecuteSqlRawAsync("""
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_WriteJournal_ActiveActivity"
+        ON "WriteJournal" ("GarminActivityId")
+        WHERE "Status" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')
+        """);
 }
 app.UseCors("LocalUi");
 
@@ -66,7 +87,8 @@ app.MapGet("/api/cache/status", async (SyncDbContext db) => Results.Ok(new {
     garmin = await db.Sessions.CountAsync(s => s.Source == "Garmin"),
     checkpoints = await db.Checkpoints.AsNoTracking().ToArrayAsync(),
     snapshots = await db.GarminSnapshots.CountAsync(),
-    cachedGarminSets = await db.GarminSets.CountAsync()
+    cachedGarminSets = await db.GarminSets.CountAsync(),
+    writeJournalEntries = await db.WriteJournal.CountAsync()
 }));
 
 app.MapGet("/api/egym/sessions", async (int? days) =>
@@ -135,6 +157,7 @@ app.MapGet("/api/sync/restore-plan/{activityId:long}", GarminRestorePlan.GetAsyn
 app.MapPost("/api/sync/rehearse", GarminWriteRehearsal.RehearseAsync);
 app.MapPost("/api/sync/save-plan", GarminSavePlan.PlanAsync);
 app.MapPost("/api/sync/save-prepare", GarminSaveOrchestrator.PrepareAsync);
+app.MapGet("/api/sync/write-journal/{activityId:long}", GarminWriteJournalRead.GetAsync);
 
 app.MapPost("/api/sync", () => Results.Problem(
     "Garmin writes are disabled in this first web slice.", statusCode: 501));
