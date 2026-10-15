@@ -136,3 +136,7 @@ Limits: a second SQLite context is not a full simultaneous multi-process crash t
 
 ## Concurrent claim test (separate SQLite contexts)
 The disposable `--test-uncertain-isolation` harness now starts two concurrent tasks using **independent DbContexts and SQLite connections** racing to claim different `DryRunVerified` journals for one synthetic activity. Exactly one must report a successful `Ready` transition and exactly one `Ready` row may be persisted. Expected SQLite busy or uniqueness failures count as losing the race. This tests concurrent connections, **not two independent OS processes**. Multi-process/process-kill testing remains a prerequisite before enabling any real Garmin PUT.
+
+## Independent OS process claim race
+The disposable `--test-uncertain-isolation` runner launches two separate `dotnet` child processes using the current Web assembly, pointed only at the disposable temporary SQLite database. Both wait for a shared start signal, then independently invoke the real journal `Begin` transition for different `DryRunVerified` journal rows referencing one synthetic activity. Exactly one child must succeed and exactly one `Ready` row must survive. Both child processes are terminated/cleaned up on parent failure. No Garmin HTTP or PUT is available on this test code path, and it never opens the user's normal `sync.db`.
+This confirms simultaneous separate-process *claim* behavior. It does not yet simulate a process kill during an outbound Garmin request or authorize live PUT.
