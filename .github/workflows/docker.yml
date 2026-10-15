@@ -4,6 +4,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: docker-main-publish
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
