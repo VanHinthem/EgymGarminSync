@@ -18,8 +18,18 @@ internal static class GarminTransactionDryRun
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
-    internal static async Task<string> ExecuteAsync(SyncDbContext db, long activityId,
-        long journalId, Read read, Write write)
+    internal static Task<string> ExecuteAsync(SyncDbContext db, long activityId,
+        long journalId, Read read, Write write) =>
+        ExecuteCoreAsync(db,activityId,journalId,read,write,false);
+
+    // Isolated harness only: exercises the same terminal journal/cache transaction
+    // expected from a future production implementation. Injected IO is synthetic.
+    internal static Task<string> ExecuteVerifiedIsolationAsync(SyncDbContext db, long activityId,
+        long journalId, Read read, Write write) =>
+        ExecuteCoreAsync(db,activityId,journalId,read,write,true);
+
+    private static async Task<string> ExecuteCoreAsync(SyncDbContext db, long activityId,
+        long journalId, Read read, Write write, bool isolatedVerified)
     {
         var journal = await db.WriteJournal.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == journalId && x.GarminActivityId == activityId && x.Status == "Ready");
@@ -66,7 +76,7 @@ internal static class GarminTransactionDryRun
             if (GarminActivityMetadataTolerance.IsAcceptable(
                     backup.ActivityJson, after.ActivityJson) &&
                 GarminFullWeightReadback.Matches(payload.CandidateJson, after.ExerciseSetsJson))
-                result = "SimulatedVerified";
+                result = isolatedVerified ? "Verified" : "SimulatedVerified";
         }
         catch(Exception) { /* Unknown outcome; never retry the writer. */ }
 
@@ -77,7 +87,19 @@ internal static class GarminTransactionDryRun
             tracked.Status = result;
             tracked.ErrorCode = result == "Uncertain" ? "SYNTHETIC_WRITE_UNKNOWN" : null;
             tracked.UpdatedUtc = DateTimeOffset.UtcNow;
-            // No cache update in a simulation, even after a matching readback.
+            if(isolatedVerified && result=="Verified" && after is not null)
+            {
+                var cache=await db.GarminSets.SingleOrDefaultAsync(x=>x.GarminActivityId==activityId);
+                if(cache is null)
+                {
+                    cache=new GarminSetsCache {GarminActivityId=activityId};
+                    db.GarminSets.Add(cache);
+                }
+                cache.ExerciseSetsJson=after.ExerciseSetsJson;
+                cache.Sha256=Hash(after.ExerciseSetsJson);
+                cache.FetchedUtc=DateTimeOffset.UtcNow;
+            }
+            // Journal and optional synthetic cache update commit atomically.
             await db.SaveChangesAsync();
             await tx.CommitAsync();
         }
