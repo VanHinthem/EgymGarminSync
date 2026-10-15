@@ -53,7 +53,7 @@ internal static class GarminJournalLifecycle
                         return Results.Conflict(new { error = "Another pending/uncertain journal blocks this activity." });
                     next = "Ready";
                     break;
-                case "MarkUncertain" when before is "Ready" or "WriteStarted":
+                case "MarkUncertain" when before == "Ready":
                     next = "Uncertain";
                     break;
                 case "VerifySimulated" when before == "Ready":
