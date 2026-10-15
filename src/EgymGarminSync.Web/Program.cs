@@ -11,6 +11,14 @@ if (args.Contains("--test-uncertain-isolation", StringComparer.Ordinal))
     return;
 }
 
+if (args.Length==5 && args[0]=="--test-process-claim-child")
+{
+    Environment.ExitCode=await GarminProcessRaceTest.ClaimChildAsync(
+        args[1],long.Parse(args[2],System.Globalization.CultureInfo.InvariantCulture),
+        long.Parse(args[3],System.Globalization.CultureInfo.InvariantCulture),args[4]);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://127.0.0.1:5187");
 builder.Services.AddCors(options => options.AddPolicy("LocalUi", policy =>
