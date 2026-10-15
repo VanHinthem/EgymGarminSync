@@ -6,14 +6,15 @@ using Garmin.Connect;
 namespace EgymGarminSync.Web;
 
 /// <summary>
-/// Garmin replace-all adapter. Live transport is deliberately hard-disabled.
-/// Not registered in DI or mapped to an HTTP endpoint.
+/// Garmin replace-all adapter. A single specifically authorized local trial can enable live PUT.
 /// </summary>
 internal static class GarminWriteTransportAdapter
 {
-    // A runtime configuration flag cannot enable this. Removing the source-code
-    // gate will require a separate review and explicit live-test authorization.
-    internal const bool LiveWriteEnabled = false;
+    // Explicit one-activity opt-in on the user's local Windows machine only.
+    internal const long TrialActivityId = 24006250902;
+    internal static bool LiveWriteEnabled =>
+        OperatingSystem.IsWindows() &&
+        Environment.GetEnvironmentVariable("GARMIN_LIVE_TRIAL") == TrialActivityId.ToString(System.Globalization.CultureInfo.InvariantCulture);
     internal delegate Task Replace(long activityId, JsonElement fullPayload);
 
     internal static async Task SendAsync(long activityId, string fullPayloadJson,
@@ -36,8 +37,8 @@ internal static class GarminWriteTransportAdapter
     internal static Task SendActualAsync(GarminGuardedWriteContextFactory.Scope guardedScope,
         long activityId,JsonElement completePayload)
     {
-        if(!LiveWriteEnabled)
-            throw new InvalidOperationException("Live Garmin PUT is disabled in source code.");
+        if(!LiveWriteEnabled || activityId != TrialActivityId)
+            throw new InvalidOperationException("Live Garmin PUT is disabled for this activity.");
         ArgumentNullException.ThrowIfNull(guardedScope);
         return GarminExerciseSetsReplaceTransport.ReplaceAsync(
             guardedScope.Context,activityId,completePayload);
