@@ -38,7 +38,7 @@ internal static class GarminUnifiedWriteWorkflow
             if(!response.IsSuccessStatusCode)
                 throw new InvalidOperationException("Synthetic PUT refused.");
         };
-        return await GarminTransactionDryRun.ExecuteVerifiedIsolationAsync(
+        return await GarminTransactionDryRun.ExecuteApprovedIsolationAsync(
             db,activityId,journalId,read,write);
     }
 }
