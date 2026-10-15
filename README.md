@@ -41,14 +41,24 @@ The example binds HTTP to host loopback `127.0.0.1:5187` for a local
 reverse proxy. Store persistent SQLite data in `./data`; never discard
 or overwrite that directory during upgrades.
 
-**Not yet ready for NAS production sync:** Garmin OAuth caching currently
-uses **Windows DPAPI** and the import/write paths require Windows. The
-Linux container can serve its web UI, health endpoint and persisted cached
-data, but cannot sign in to Garmin or perform the normal import/write workflow
-until a secure Linux-compatible token cache and platform guards are implemented.
-Do not copy a Windows `.dpapi` token cache into Linux. Writes stay disabled
-in the Linux build. The image and compose example are deployment scaffolding,
-not a declaration that Garmin synchronization works on Linux yet.
+**Linux Garmin authentication:** the container uses an AES-256-GCM encrypted
+OAuth token cache in the persistent `./data/Garmin` directory. Generate a
+persistent 32-byte key (Base64) and supply it as `GARMIN_TOKEN_KEY`:
+
+```sh
+openssl rand -base64 32
+```
+
+Keep this key in a secrets manager or a protected local environment file,
+never in Git. Do not change it between deployments: an incorrect key refuses
+to load the token cache (no silent reset). Windows continues to use DPAPI.
+
+Live Garmin writes remain disabled by default. Linux additionally requires
+both `GARMIN_WRITE_ENABLED=1` and `GARMIN_LINUX_WRITE_ENABLED=1`, along with
+the existing explicit per-write approval and full readback checks. **Do not
+enable live writes on NAS until a read-only login/import and isolated
+verification have passed on the NAS itself.** The Windows DPAPI token file
+cannot be migrated directly. Use a new login with your credentials instead.
 
 The GitHub package may initially be private; configure NAS GHCR authentication
 if the registry denies an anonymous pull.
