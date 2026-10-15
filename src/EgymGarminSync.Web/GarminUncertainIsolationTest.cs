@@ -451,9 +451,9 @@ internal static class GarminUncertainIsolationTest
                 if(!liveAdapterBlocked)
                     throw new InvalidOperationException("Adapter could issue live PUT.");
                 Console.WriteLine("PASS: guarded Garmin transport refuses live PUT without mock.");
-                foreach(var mode in new[] {"Verified","Mismatch","Timeout"})
+                foreach(var (mode, scenarioIndex) in new[] {"Verified","Mismatch","Timeout"}.Select((value,index)=>(value,index)))
                 {
-                    var id=activityId+20000+mode.Length;
+                    var id=activityId+20000+scenarioIndex;
                     var activityJson=JsonSerializer.Serialize(new {activityId=id});
                     var baseline=BuildSyntheticSets(id);
                     var candidate=GarminSetFieldDraft.Apply(baseline,
