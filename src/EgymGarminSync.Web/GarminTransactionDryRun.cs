@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using EgymGarminSync.Matching;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +55,20 @@ internal static class GarminTransactionDryRun
             payload.CandidateSha256 != journal.CandidateSha256 ||
             payload.OutgoingSha256 != journal.ProposedPayloadSha256)
             return "Blocked";
+
+        // A matching journal hash alone is not sufficient authorization: validate
+        // full replace-all shape and derive the exact normalized payload anew.
+        try
+        {
+            GarminExerciseSetsWriteContract.Validate(payload.OutgoingJson,activityId);
+            var normalized=GarminTrialPayloadNormalizer.Normalize(payload.CandidateJson,activityId);
+            if(!string.Equals(normalized,payload.OutgoingJson,StringComparison.Ordinal))
+                return "Blocked";
+        }
+        catch(Exception e) when(e is JsonException or InvalidOperationException or ArgumentException)
+        {
+            return "Blocked";
+        }
 
         // Persist intent *before* invoking the injected writer. Once this commit
         // succeeds, any exception or process termination requires reconciliation.
