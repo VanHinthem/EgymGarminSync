@@ -46,7 +46,6 @@ function App() {
   const [previewResult,setPreviewResult] = useState('')
   const [preparedBackupId,setPreparedBackupId] = useState<number|null>(null)
   const [writePlan,setWritePlan] = useState<{journalId:number;candidateSha256:string;outgoingSha256:string;canWrite:boolean}|null>(null)
-  const [confirmation,setConfirmation] = useState('')
   const [preparing,setPreparing] = useState(false)
   const [writing,setWriting] = useState(false)
   const [writeAttempted,setWriteAttempted] = useState(false)
@@ -126,7 +125,7 @@ function App() {
     if (state.reps!==undefined && state.reps!==row.garminReps) result.push(`${row.exercise} set ${row.set}: ${row.garminReps} → ${state.reps} reps`)
     return result
   }),[draft,displayedRows])
-  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('');setWriteAttempted(false)}
+  function stage(id:string,key:'kg'|'reps',value:number){setDraft(p=>({...p,[id]:{...p[id],[key]:value}}));setReview(false);setPreparedBackupId(null);setWritePlan(null);setWriteAttempted(false)}
   function selectedEdits(){
     return displayedRows.flatMap(r=>{
       const change=draft[r.id]??{}
@@ -153,7 +152,7 @@ function App() {
   }
   async function prepareSave(){
     if(mode!=='live'||changeList.length===0||preparing)return
-    setPreparing(true);setWritePlan(null);setConfirmation('');setPreparedBackupId(null);setWriteAttempted(false)
+    setPreparing(true);setWritePlan(null);setPreparedBackupId(null);setWriteAttempted(false)
     const activityId=Number(selectedGarmin)
     const edits=selectedEdits()
     try{
@@ -170,7 +169,7 @@ function App() {
       const result=await planResponse.json() as {journalId:number;candidateSha256:string;normalizedSha256:string;canWrite:boolean}
       setWritePlan({journalId:result.journalId,candidateSha256:result.candidateSha256,
         outgoingSha256:result.normalizedSha256,canWrite:result.canWrite})
-      setPreviewResult('Veiligheidskopie en controles zijn gereed. Bevestig de opslag hieronder; er is nog niets naar Garmin geschreven.')
+      setPreviewResult('Veiligheidskopie en controles gereed. Wil je de getoonde wijzigingen definitief in Garmin opslaan?')
     }catch(e){
       setWritePlan(null)
       setPreviewResult(e instanceof Error?e.message:'Voorbereiding mislukt. Er is niets naar Garmin geschreven.')
@@ -190,7 +189,7 @@ function App() {
       if(!ready){setPreviewResult('Geen Ready schrijfvoorbereiding gevonden.');return}
       setWritePlan({journalId:ready.id,candidateSha256:ready.candidateSha256,
         outgoingSha256:ready.proposedPayloadSha256,canWrite:health.writeEnabled})
-      setConfirmation('');setReview(true);setWriteAttempted(false)
+      setReview(true);setWriteAttempted(false)
       setPreviewResult(`Schrijfvoorbereiding #${ready.id} geladen. Controleer de exacte wijziging en bevestiging.`)
     }catch{setPreviewResult('Kon de voorbereiding niet laden.')}
   }
@@ -206,15 +205,14 @@ function App() {
         setPreviewResult('Annuleren niet mogelijk. Controleer de journalstatus voordat je verdergaat.')
         return
       }
-      setWritePlan(null);setConfirmation('');setPreparedBackupId(null);setWriteAttempted(false)
+      setWritePlan(null);setPreparedBackupId(null);setWriteAttempted(false)
       setPreviewResult('Opslagvoorbereiding geannuleerd. Er is niets naar Garmin geschreven; de veiligheidskopie blijft bewaard.')
     }catch{setPreviewResult('Annuleren niet bevestigd. Controleer de journalstatus; probeer niet opnieuw op te slaan.')}
   }
   async function executeWrite(){
     if(!writePlan||writing||writeAttempted)return
     const activityId=Number(selectedGarmin)
-    const exact=`APPROVE GARMIN ${activityId} ${writePlan.journalId}`
-    if(confirmation!==exact)return
+    const confirmation=`APPROVE GARMIN ${activityId} ${writePlan.journalId}`
     setWriting(true);setWriteAttempted(true)
     try{
       const response=await fetch('/api/sync/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
@@ -226,11 +224,11 @@ function App() {
       setPreviewResult(result?.status==='Verified'
         ? 'Wijzigingen opgeslagen in Garmin en gecontroleerd. Je lokale gegevens zijn bijgewerkt.'
         : 'Garmin-opslag gaf geen bevestigde eindstatus.')
-      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setConfirmation('');setWriteAttempted(false)}
+      if(result?.status==='Verified'){setDraft({});setWritePlan(null);setWriteAttempted(false)}
     }catch{setPreviewResult('Garmin-opslag niet bereikbaar. Controleer het journal voordat je opnieuw iets doet.')}
     finally{setWriting(false)}
   }
-  function pickEgym(id:string){setPreparedBackupId(null);setWritePlan(null);setConfirmation('');setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
+  function pickEgym(id:string){setPreparedBackupId(null);setWritePlan(null);setSelectedEgym(id);const source=egym.find(e=>e.id===id);setSelectedGarmin(mode==='demo'?(demoGarmin.find(g=>g.completedAt?.slice(0,10)===source?.completedAt?.slice(0,10))?.id??''):propose(source,garmin));setDraft({});setReview(false)}
   async function readCache(){
     const [eResponse,gResponse,statusResponse]=await Promise.all([
       fetch('/api/cache/sessions?source=EGYM'),
@@ -246,7 +244,7 @@ function App() {
     setSelectedEgym(e[0]?.id??'')
     setSelectedGarmin(propose(e[0],g))
     setLastSync(status.checkpoints.find(c=>c.source==='EGYM')?.lastSuccessfulUtc??null)
-    setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')
+    setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);
   }
   useEffect(()=>{readCache().catch(e=>setError(e instanceof Error?e.message:'Kan lokale database niet lezen'))},[])
   async function loadEgym(){
@@ -269,7 +267,7 @@ function App() {
     {mode==='demo'&&<div className="notice"><CircleAlert size={17}/> Dit is een interactieve demo met voorbeeldgegevens. Live Garmin-data en synchronisatie zijn nog niet aangesloten.</div>}
     <section className="sessionGrid">
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen {statusLabel(s.id)}</option>)}</select></article>
-      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
+      <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
     </section>
     
     <section className="comparison panel"><div className="compareHeader"><div><div className="eyebrow">VERGELIJKING</div><h2>Oefeningen en sets</h2><p>Neem gewicht en herhalingen afzonderlijk over van EGYM naar Garmin.</p></div><div className="compareTools"><span className="count">{differenceCount} afwijkende sets · {changeList.length} wijzigingen gekozen</span><label className="differenceFilter"><input type="checkbox" checked={differencesOnly} onChange={e=>setDifferencesOnly(e.target.checked)}/> Alleen afwijkingen</label></div></div>
@@ -277,8 +275,8 @@ function App() {
       {warnings.length>0&&<div className="notice">{warnings.join(' · ')}</div>}
       {setsLoading&&<div className="empty">Oefeningen laden...</div>}
       {selectedGarmin&&!setsLoading&&displayedRows.length>0?<><div className="tableScroll"><table><thead><tr><th>EGYM-oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th><th>Garmin-oefening</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id} className={differs(row)?'diffRow':'matchRow'}><td><strong>{row.egymExercise??row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div className={row.egymKg!==row.garminKg?'differenceValue':''}>{row.egymKg} kg</div><div className={row.egymReps!==row.garminReps?'differenceValue':''}>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td><td><strong>{row.garminExercise??row.exercise}</strong><small>Set {row.set}</small></td></tr>)}</tbody></table></div>
-      <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>void checkServerPreview()}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
-      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&selectedGarmin&&writePlan===null&&<button className="ghost" onClick={()=>void resumeWritePlan()}>Bestaande voorbereiding terughalen</button>}{mode==='live'&&changeList.length>0&&writePlan===null&&<button className="primary" disabled={preparing||writing} onClick={()=>void prepareSave()}><Save size={16}/>{preparing?'Veiligheidscontrole uitvoeren...':'Opslaan in Garmin'}</button>}{writePlan&&<><p><strong>Definitieve bevestiging</strong> — er is nog niets naar Garmin geschreven.</p><p>Typ exact: <code>{`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`}</code></p><input value={confirmation} onChange={e=>setConfirmation(e.target.value)} placeholder="Typ de exacte bevestiging"/><button className="primary" disabled={writing||writeAttempted||!writePlan.canWrite||confirmation!==`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`} onClick={()=>void executeWrite()}><Save size={16}/> {writing?'Opslaan en controleren...':'Definitief opslaan'}</button><button className="ghost" disabled={writing||preparing} onClick={()=>void cancelWrite()}>Voorbereiding annuleren</button>{writeAttempted&&writePlan&&<p>Deze opslagpoging is afgesloten voor herhaling. Controleer eerst het journal en de Garmin-gegevens voordat je een nieuwe voorbereiding maakt.</p>}{!writePlan.canWrite&&<p>Opslaan is op dit moment uitgeschakeld. Je wijzigingen zijn alleen voorbereid.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
+      <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false);setPreparedBackupId(null);setWritePlan(null);}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>void checkServerPreview()}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
+      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&selectedGarmin&&writePlan===null&&<button className="ghost" onClick={()=>void resumeWritePlan()}>Bestaande voorbereiding terughalen</button>}{mode==='live'&&changeList.length>0&&writePlan===null&&<button className="primary" disabled={preparing||writing} onClick={()=>void prepareSave()}><Save size={16}/>{preparing?'Veiligheidscontrole uitvoeren...':'Opslaan in Garmin'}</button>}{writePlan&&<><div className="saveConfirm" role="group" aria-label="Garmin-opslag bevestigen"><h3>Wijzigingen opslaan in Garmin?</h3><p>Alleen de hierboven getoonde wijzigingen worden opgeslagen. De volledige Garmin-training wordt daarna gecontroleerd.</p><div className="buttons"><button className="primary" disabled={writing||writeAttempted||preparing||!writePlan.canWrite} onClick={()=>void executeWrite()}><Save size={16}/>{writing?'Opslaan en controleren...':'Ja, opslaan'}</button><button className="ghost" disabled={writing||preparing} onClick={()=>void cancelWrite()}>Nee, annuleren</button></div></div>{writeAttempted&&<p>Deze opslagpoging kan niet opnieuw worden verzonden. Controleer eerst de journalstatus.</p>}{!writePlan.canWrite&&<p>Opslaan is momenteel uitgeschakeld. Annuleren blijft mogelijk.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
     </section>
   </main>
 }
