@@ -102,7 +102,7 @@ internal static class ReadOnlySetComparison
         if (!egymId.StartsWith("egym-", StringComparison.Ordinal) ||
             !int.TryParse(egymId.AsSpan(5), out var index) || index < 0 || garminId <= 0)
             return Results.BadRequest(new { error = "Invalid session selection." });
-        if (!OperatingSystem.IsWindows())
+        if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Windows DPAPI is required for Garmin access.", statusCode: 501);
         var ee = Environment.GetEnvironmentVariable("EGYM_EMAIL");
         var ep = Environment.GetEnvironmentVariable("EGYM_PASSWORD");
@@ -118,7 +118,7 @@ internal static class ReadOnlySetComparison
             if (index >= sessions.Count) return Results.NotFound();
             var workout = sessions[index];
 
-            var cache = new WindowsGarminTokenCache(ge!);
+            var cache = new GarminTokenCacheProvider(ge!);
             if (cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.", statusCode: 429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
