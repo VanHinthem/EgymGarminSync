@@ -27,7 +27,7 @@ internal static class GarminSaveOrchestrator
 
     public static async Task<IResult> PrepareAsync(Request request, SyncDbContext db)
     {
-        if (!OperatingSystem.IsWindows())
+        if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Windows DPAPI required.", statusCode: 501);
         if (request.GarminId <= 0 || request.SnapshotId <= 0 ||
             request.Edits is not { Length: > 0 and <= 72 })
@@ -48,7 +48,7 @@ internal static class GarminSaveOrchestrator
             var password = Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 return Results.Problem("Garmin credentials unavailable.",statusCode:503);
-            var tokenCache = new WindowsGarminTokenCache(email);
+            var tokenCache = new GarminTokenCacheProvider(email);
             if (tokenCache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.",statusCode:429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
