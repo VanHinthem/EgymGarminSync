@@ -100,12 +100,18 @@ internal static class GarminTransactionDryRun
 
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
-            var tracked = await db.WriteJournal.SingleAsync(x => x.Id == journalId);
-            if (tracked.Status != "WriteStarted" || tracked.OperationId != operationId)
-                return "Uncertain";
-            tracked.Status = result;
-            tracked.ErrorCode = result == "Uncertain" ? "SYNTHETIC_WRITE_UNKNOWN" : null;
-            tracked.UpdatedUtc = DateTimeOffset.UtcNow;
+            // Database-level compare-and-swap is essential: the DbContext may
+            // still hold the writer's old tracked entity after another process
+            // changed the row. Do not trust its cached OperationId.
+            var updated = await db.WriteJournal.Where(x =>
+                x.Id == journalId && x.GarminActivityId == activityId &&
+                x.Status == "WriteStarted" && x.OperationId == operationId)
+                .ExecuteUpdateAsync(changes => changes
+                    .SetProperty(x => x.Status, result)
+                    .SetProperty(x => x.ErrorCode,
+                        result == "Uncertain" ? "SYNTHETIC_WRITE_UNKNOWN" : null)
+                    .SetProperty(x => x.UpdatedUtc, DateTimeOffset.UtcNow));
+            if (updated != 1) return "Uncertain";
             if(isolatedVerified && result=="Verified" && after is not null)
             {
                 var cache=await db.GarminSets.SingleOrDefaultAsync(x=>x.GarminActivityId==activityId);
