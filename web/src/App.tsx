@@ -44,6 +44,7 @@ function App() {
   const [preparedBackupId,setPreparedBackupId] = useState<number|null>(null)
   const [writePlan,setWritePlan] = useState<{journalId:number;candidateSha256:string;outgoingSha256:string;canWrite:boolean}|null>(null)
   const [confirmation,setConfirmation] = useState('')
+  const [preparing,setPreparing] = useState(false)
   const [liveRows,setLiveRows] = useState<SetRow[]>([])
   const [warnings,setWarnings] = useState<string[]>([])
   const [setsLoading,setSetsLoading] = useState(false)
@@ -106,18 +107,30 @@ function App() {
         : 'Servercontrole geslaagd: actuele Garmin-waarden komen overeen. Er is niets opgeslagen.')
     }catch{setPreviewResult('Servercontrole niet bereikbaar. Er is niets opgeslagen.')}
   }
-  async function checkSavePlan(){
-    if(mode!=='live'||preparedBackupId===null)return
-    setWritePlan(null);setConfirmation('')
+  async function prepareSave(){
+    if(mode!=='live'||changeList.length===0||preparing)return
+    setPreparing(true);setWritePlan(null);setConfirmation('');setPreparedBackupId(null)
+    const activityId=Number(selectedGarmin)
+    const edits=selectedEdits()
     try{
-      const response=await fetch('/api/sync/save-prepare',{method:'POST',
+      const backup=await fetch('/api/sync/prepare',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({garminId:activityId,edits})})
+      if(!backup.ok)throw new Error('Veiligheidscontrole mislukt. Controleer de Garmin-training opnieuw.')
+      const snapshot=await backup.json() as {snapshotId?:number|null}
+      if(snapshot.snapshotId==null)throw new Error('Er is geen veiligheidskopie ontvangen.')
+      setPreparedBackupId(snapshot.snapshotId)
+      const planResponse=await fetch('/api/sync/save-prepare',{method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({garminId:Number(selectedGarmin),snapshotId:preparedBackupId,edits:selectedEdits()})})
-      if(!response.ok){setPreviewResult('Schrijfvoorbereiding geweigerd: Garmin is gewijzigd of de backup is niet geldig.');return}
-      const result=await response.json() as {journalId:number;candidateSha256:string;normalizedSha256:string;canWrite:boolean}
-      setWritePlan({journalId:result.journalId,candidateSha256:result.candidateSha256,outgoingSha256:result.normalizedSha256,canWrite:result.canWrite})
-      setPreviewResult(`Je wijzigingen zijn gecontroleerd en klaar om op te slaan. Er is nog niets naar Garmin verzonden.`)
-    }catch{setPreviewResult('Schrijfvoorbereiding niet bereikbaar. Niets naar Garmin geschreven.')}
+        body:JSON.stringify({garminId:activityId,snapshotId:snapshot.snapshotId,edits})})
+      if(!planResponse.ok)throw new Error('Opslagvoorbereiding geweigerd. Garmin kan gewijzigd zijn; sla niets op.')
+      const result=await planResponse.json() as {journalId:number;candidateSha256:string;normalizedSha256:string;canWrite:boolean}
+      setWritePlan({journalId:result.journalId,candidateSha256:result.candidateSha256,
+        outgoingSha256:result.normalizedSha256,canWrite:result.canWrite})
+      setPreviewResult('Veiligheidskopie gemaakt en wijzigingen gecontroleerd. Bevestig hieronder om op te slaan.')
+    }catch(e){
+      setWritePlan(null)
+      setPreviewResult(e instanceof Error?e.message:'Voorbereiding mislukt. Er is niets naar Garmin geschreven.')
+    }finally{setPreparing(false)}
   }
   async function resumeWritePlan(){
     if(mode!=='live'||!selectedGarmin)return
@@ -203,7 +216,7 @@ function App() {
       {setsLoading&&<div className="empty">Oefeningen laden...</div>}
       {selectedGarmin&&!setsLoading&&displayedRows.length>0?<><div className="tableScroll"><table><thead><tr><th>EGYM-oefening</th><th className="num">EGYM <span>(bron)</span></th><th className="action">Overnemen</th><th className="num">Garmin <span>(concept)</span></th><th>Garmin-oefening</th></tr></thead><tbody>{displayedRows.map(row=><tr key={row.id}><td><strong>{row.egymExercise??row.exercise}</strong><small>Set {row.set}</small></td><td className="num values"><div>{row.egymKg} kg</div><div>{row.egymReps} reps</div></td><td className="action"><div><button aria-label={`Neem gewicht van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.kg??row.garminKg)===row.egymKg} onClick={()=>stage(row.id,'kg',row.egymKg)}>kg <ArrowRight size={14}/></button><button aria-label={`Neem herhalingen van ${row.exercise} set ${row.set} over`} disabled={(draft[row.id]?.reps??row.garminReps)===row.egymReps} onClick={()=>stage(row.id,'reps',row.egymReps)}>reps <ArrowRight size={14}/></button></div></td><td className="num values"><div className={draft[row.id]?.kg!==undefined?'staged':''}>{draft[row.id]?.kg??row.garminKg} kg</div><div className={draft[row.id]?.reps!==undefined?'staged':''}>{draft[row.id]?.reps??row.garminReps} reps</div></td><td><strong>{row.garminExercise??row.exercise}</strong><small>Set {row.set}</small></td></tr>)}</tbody></table></div>
       <div className="footer"><div className="buttons"><button className="secondary" onClick={()=>{setDraft(Object.fromEntries(displayedRows.map(r=>[r.id,{kg:r.egymKg,reps:r.egymReps}])));setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><RefreshCw size={16}/> Alles overnemen</button><button className="ghost" onClick={()=>{setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);setConfirmation('')}}><Undo2 size={16}/> Ongedaan maken</button></div><button className="primary" disabled={changeList.length===0} onClick={()=>void checkServerPreview()}>Wijzigingen controleren <ArrowRight size={16}/></button></div>
-      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&<button className="secondary" onClick={()=>void checkServerPreview(true)}>Veiligheidskopie maken</button>}{mode==='live'&&preparedBackupId!==null&&changeList.length>0&&writePlan===null&&<button className="secondary" onClick={()=>void checkSavePlan()}>Opslag voorbereiden</button>}{writePlan&&<><p>Bevestig exact: <code>{`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`}</code></p><input value={confirmation} onChange={e=>setConfirmation(e.target.value)} placeholder="Typ de exacte bevestiging"/><button className="primary" disabled={!writePlan.canWrite||confirmation!==`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`} onClick={()=>void executeWrite()}><Save size={16}/> Opslaan in Garmin</button>{!writePlan.canWrite&&<p>Opslaan is op dit moment uitgeschakeld. Je wijzigingen zijn alleen voorbereid.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
+      {review&&<div className="review"><h3>Te bewaren wijzigingen ({changeList.length})</h3>{changeList.map((v,i)=><p key={i}>{v}</p>)}{previewResult&&<p>{previewResult}</p>}{mode==='live'&&changeList.length>0&&writePlan===null&&<button className="secondary" disabled={preparing} onClick={()=>void prepareSave()}>{preparing?'Voorbereiden...':'Opslaan voorbereiden'}</button>}{writePlan&&<><p>Bevestig exact: <code>{`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`}</code></p><input value={confirmation} onChange={e=>setConfirmation(e.target.value)} placeholder="Typ de exacte bevestiging"/><button className="primary" disabled={!writePlan.canWrite||confirmation!==`APPROVE GARMIN ${selectedGarmin} ${writePlan.journalId}`} onClick={()=>void executeWrite()}><Save size={16}/> Opslaan in Garmin</button>{!writePlan.canWrite&&<p>Opslaan is op dit moment uitgeschakeld. Je wijzigingen zijn alleen voorbereid.</p>}</>}<p>Na je bevestiging controleren we automatisch of Garmin alle wijzigingen correct heeft opgeslagen.</p></div>}</>:<div className="empty"><CircleAlert size={23}/><strong>Geen vergelijkbare sets beschikbaar</strong><p>Selecteer links en rechts een training. Niet-herkende of incomplete sets worden niet automatisch gekoppeld.</p></div>}
     </section>
   </main>
 }
