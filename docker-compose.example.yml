@@ -1,0 +1,18 @@
+services:
+  egym-garmin-sync:
+    image: ghcr.io/vanhinthem/egymgarminsync:latest
+    container_name: egym-garmin-sync
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5187:5187"
+    volumes:
+      - ./data:/data
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      EGYM_SYNC_DATA_DIR: /data
+      EGYM_EMAIL: ${EGYM_EMAIL}
+      EGYM_PASSWORD: ${EGYM_PASSWORD}
+      GARMIN_EMAIL: ${GARMIN_EMAIL}
+      GARMIN_PASSWORD: ${GARMIN_PASSWORD}
+      GARMIN_WRITE_ENABLED: "0"
+    # IMPORTANT: Linux Garmin OAuth cache is not yet supported. See README.
