@@ -293,6 +293,60 @@ internal static class GarminUncertainIsolationTest
                     }
                     finally { /* Durable payload intentionally preserved for recovery. */ }
                 }
+                // Emulate process death AFTER committed WriteStarted and BEFORE readback.
+                var crashId=activityId+8000;
+                var crashActivity=JsonSerializer.Serialize(new {activityId=crashId});
+                var crashSets=BuildSyntheticSets(crashId);
+                var crashCandidate=GarminSetFieldDraft.Apply(crashSets,
+                    new[] {new SetFieldEdit(2,"repetitionCount",15,14)});
+                var crashOutgoing=GarminTrialPayloadNormalizer.Normalize(crashCandidate,crashId);
+                var crashBackup=new GarminSnapshot {
+                    GarminActivityId=crashId,Kind="WritePreparation",
+                    ActivityJson=crashActivity,ActivitySha256=Hash(crashActivity),
+                    ExerciseSetsJson=crashSets,SetsSha256=Hash(crashSets),
+                    CapturedUtc=DateTimeOffset.UtcNow
+                };
+                reopened.GarminSnapshots.Add(crashBackup);
+                await reopened.SaveChangesAsync();
+                var crashEntry=new GarminWriteJournal {
+                    GarminActivityId=crashId,ApprovedSnapshotId=crashBackup.Id,
+                    FreshSnapshotId=crashBackup.Id,Status="DryRunVerified",
+                    OriginalSha256=Hash(crashSets),CandidateSha256=Hash(crashCandidate),
+                    ProposedPayloadSha256=Hash(crashOutgoing),
+                    RecoveryPayloadSha256=Hash(crashSets),
+                    CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                };
+                reopened.WriteJournal.Add(crashEntry);
+                await reopened.SaveChangesAsync();
+                if(!await GarminTransactionDryRun.PersistSyntheticPayloadAsync(reopened,
+                    crashId,crashEntry.Id,crashCandidate,crashOutgoing))
+                    throw new InvalidOperationException("Crash payload not persisted.");
+                await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                    new(crashId,crashEntry.Id,"Begin"),reopened),"Crash Begin");
+                // Separate process emulation: committed state changed to WriteStarted.
+                var crashTracked=await reopened.WriteJournal.SingleAsync(x=>x.Id==crashEntry.Id);
+                crashTracked.Status="WriteStarted";
+                await reopened.SaveChangesAsync();
+                reopened.ChangeTracker.Clear();
+                if(await GarminCrashRecovery.RecoverAsync(reopened)!=1)
+                    throw new InvalidOperationException("Crash recovery count incorrect.");
+                if(await GarminCrashRecovery.RecoverAsync(reopened)!=0)
+                    throw new InvalidOperationException("Crash recovery was not idempotent.");
+                var recovered=await reopened.WriteJournal.AsNoTracking()
+                    .SingleAsync(x=>x.Id==crashEntry.Id);
+                var durable=await reopened.WritePayloads.AsNoTracking()
+                    .SingleAsync(x=>x.JournalId==crashEntry.Id);
+                if(recovered.Status!="Uncertain" ||
+                    durable.CandidateSha256!=Hash(crashCandidate) ||
+                    durable.OutgoingSha256!=Hash(crashOutgoing))
+                    throw new InvalidOperationException("Crash recovery or durable payload invalid.");
+                var retried=await GarminTransactionDryRun.ExecuteAsync(reopened,crashId,crashEntry.Id,
+                    _=>throw new InvalidOperationException("Read must not happen on retry"),
+                    (_,_)=>throw new InvalidOperationException("Write must not happen on retry"));
+                if(retried!="Blocked")
+                    throw new InvalidOperationException("Recovered write could be retried.");
+                Console.WriteLine("PASS: interrupted WriteStarted -> persistent Uncertain; repeat recovery safe.");
+                Console.WriteLine("PASS: recovery payload survives and synthetic writer cannot retry.");
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
