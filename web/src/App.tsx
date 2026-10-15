@@ -109,7 +109,10 @@ function App() {
     pending:Object.values(sessionStatuses).filter(s=>s==='checking'||s==='unknown'||s==='unmatched').length
   }
   function nextDifferent(){
-    const next=egym.find(s=>sessionStatuses[s.id]==='different'&&s.id!==selectedEgym)
+    const matches=egym.filter(s=>sessionStatuses[s.id]==='different')
+    if(matches.length===0)return
+    const currentIndex=matches.findIndex(s=>s.id===selectedEgym)
+    const next=matches[(currentIndex+1)%matches.length]
     if(next)pickEgym(next.id)
   }
   const displayedRows = mode==='demo' ? exampleRows : liveRows
@@ -274,7 +277,7 @@ function App() {
     {lastSync&&<p className="note">Laatste synchronisatie: {new Date(lastSync).toLocaleString('nl-NL')}</p>}
     {error && <div className="warning"><CircleAlert size={17}/>{error}</div>}
     {mode==='demo'&&<div className="notice"><CircleAlert size={17}/> Dit is een interactieve demo met voorbeeldgegevens. Live Garmin-data en synchronisatie zijn nog niet aangesloten.</div>}
-    {mode==='live'&&<div className="syncOverview"><div><strong>{statusCounts.different} trainingen met afwijkingen</strong><span>{statusCounts.matching} komen overeen · {statusCounts.pending} nog te controleren (laatste 20 trainingen, lokale cache)</span></div><button className="secondary" disabled={!egym.some(s=>sessionStatuses[s.id]==='different'&&s.id!==selectedEgym)} onClick={nextDifferent}>Volgende met afwijkingen <ArrowRight size={15}/></button></div>}
+    {mode==='live'&&<div className="syncOverview"><div><strong>{statusCounts.different} trainingen met afwijkingen</strong><span>{statusCounts.matching} komen overeen · {statusCounts.pending} nog te controleren (laatste 20 trainingen, lokale cache)</span></div><button className="secondary" disabled={statusCounts.different===0} onClick={nextDifferent}>Volgende met afwijkingen <ArrowRight size={15}/></button></div>}
     <section className="sessionGrid">
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon">E</span> EGYM <span className="light">· bron</span></div><h2>Selecteer een training</h2></div><span className="count">{egym.length} sessies</span></div><label className="label" htmlFor="egymSession">EGYM-training kiezen</label><select id="egymSession" value={selectedEgym} onChange={e=>pickEgym(e.target.value)}><option value="">Geen training geselecteerd</option>{egym.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.exerciseCount} oefeningen {statusLabel(s.id)}</option>)}</select></article>
       <article className="panel"><div className="panelHead"><div><div className="provider"><span className="providerIcon garmin">G</span> GARMIN <span className="light">· doel</span></div><h2>Bijbehorende training</h2></div><Link2 size={18} className="subtle"/></div><div className="suggest"><strong>Voorgestelde match</strong><span>{mode==='demo'?'Op datum gekoppeld (demo)':candidate?'Unieke match op methode en tijd':'Geen eenduidige match — kies handmatig'}</span></div><label className="label" htmlFor="garminSession">Garmin-training kiezen</label><select id="garminSession" value={selectedGarmin} onChange={e=>{setSelectedGarmin(e.target.value);setDraft({});setReview(false);setPreparedBackupId(null);setWritePlan(null);}} ><option value="">Geen training geselecteerd</option>{garmin.map(s=><option key={s.id} value={s.id}>{displayDate(s.completedAt)} · {s.id}</option>)}</select><p className="note">Je kunt een voorgestelde match altijd handmatig wijzigen. Alleen een unieke kandidaat binnen twee uur met passende trainingsmethode wordt voorgesteld.</p></article>
