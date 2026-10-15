@@ -10,6 +10,7 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <Compile Include="../EgymGarminSync.Garmin.Cli/WindowsGarminTokenCache.cs" Link="WindowsGarminTokenCache.cs" />
     <Compile Include="../EgymGarminSync.Garmin.Cli/GarminIpv4Transport.cs" Link="GarminIpv4Transport.cs" />
+    <Compile Include="../EgymGarminSync.Garmin.Cli/GarminExerciseSetsReplaceTransport.cs" Link="GarminExerciseSetsReplaceTransport.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../EgymGarminSync.Egym/EgymGarminSync.Egym.csproj" />
