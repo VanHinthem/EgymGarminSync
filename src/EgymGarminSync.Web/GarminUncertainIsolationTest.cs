@@ -333,6 +333,14 @@ internal static class GarminUncertainIsolationTest
                     (await reopened.WriteJournal.AsNoTracking().SingleAsync(x=>x.Id==crashEntry.Id)).Status!="WriteStarted")
                     throw new InvalidOperationException("Startup interfered with a possible active writer.");
                 Console.WriteLine("PASS: second API startup preserves possibly active WriteStarted.");
+                var illegitimateMark=await GarminJournalLifecycle.TransitionAsync(
+                    new(crashId,crashEntry.Id,"MarkUncertain"),reopened);
+                if(illegitimateMark is not IStatusCodeHttpResult {StatusCode:409} ||
+                    (await reopened.WriteJournal.AsNoTracking()
+                        .SingleAsync(x=>x.Id==crashEntry.Id)).Status!="WriteStarted")
+                    throw new InvalidOperationException("Developer endpoint hijacked active WriteStarted.");
+                Console.WriteLine("PASS: developer MarkUncertain cannot hijack active WriteStarted.");
+
                 if(await GarminCrashRecovery.RecoverAsync(reopened,exclusiveWriterShutdownConfirmed:true)!=1)
                     throw new InvalidOperationException("Crash recovery count incorrect.");
                 if(await GarminCrashRecovery.RecoverAsync(reopened,exclusiveWriterShutdownConfirmed:true)!=0)
