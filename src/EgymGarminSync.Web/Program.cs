@@ -20,11 +20,12 @@ if (args.Length==5 && args[0]=="--test-process-claim-child")
 }
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://127.0.0.1:5187");
+builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "http://127.0.0.1:5187");
 builder.Services.AddCors(options => options.AddPolicy("LocalUi", policy =>
     policy.WithOrigins("http://127.0.0.1:5173", "http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
-var dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "EgymGarminSync", "sync.db");
+var dataDirectory=Environment.GetEnvironmentVariable("EGYM_SYNC_DATA_DIR") ??
+    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EgymGarminSync");
+var dbPath = Path.Combine(dataDirectory, "sync.db");
 Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 builder.Services.AddDbContext<SyncDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 var app = builder.Build();
@@ -91,6 +92,8 @@ using (var scope = app.Services.CreateScope())
     }
     await GarminCrashRecovery.RecoverAsync(database);
 }
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseCors("LocalUi");
 
 app.MapGet("/api/health", () => Results.Ok(new {
@@ -235,6 +238,7 @@ app.MapPost("/api/sync", () => Results.Problem(
         : "Garmin writes are disabled in source code.",
     statusCode: 501));
 
+app.MapFallbackToFile("index.html");
 app.Run();
 
 internal sealed record GarminCancelRequest(long ActivityId, long JournalId);
