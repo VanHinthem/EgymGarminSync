@@ -560,14 +560,14 @@ internal static class GarminUncertainIsolationTest
                         return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized));
                     }));
                     using var sdkHttp=new HttpClient(guardSdk);
-                    var token=new Garmin.Connect.Auth.OAuth2Token {
+                    var token=new global::Garmin.Connect.Auth.OAuth2Token {
                         AccessToken="synthetic-not-real",TokenType="Bearer",ExpiresIn=3600
                     };
                     var tokenCache=new FakeGarminTokenCache(token);
-                    var sdkContext=new Garmin.Connect.GarminConnectContext(
-                        sdkHttp,new Garmin.Connect.Parameters.BasicAuthParameters(
+                    var sdkContext=new global::Garmin.Connect.GarminConnectContext(
+                        sdkHttp,new global::Garmin.Connect.Parameters.BasicAuthParameters(
                             "synthetic@example.invalid","synthetic-password"),
-                        new Garmin.Connect.Auth.External.NotImplementedMfaCode(),tokenCache);
+                        new global::Garmin.Connect.Auth.External.NotImplementedMfaCode(),tokenCache);
                     try
                     {
                         using var fakePayload=JsonDocument.Parse("{}");
@@ -598,16 +598,16 @@ internal static class GarminUncertainIsolationTest
         }
     }
 
-    private sealed class FakeGarminTokenCache(Garmin.Connect.Auth.OAuth2Token token)
-        : Garmin.Connect.Auth.ITokenCache
+    private sealed class FakeGarminTokenCache(global::Garmin.Connect.Auth.OAuth2Token token)
+        : global::Garmin.Connect.Auth.ITokenCache
     {
-        public Task<Garmin.Connect.Auth.OAuth2Token?> GetOAuth2Token(
-            CancellationToken ct) => Task.FromResult<Garmin.Connect.Auth.OAuth2Token?>(token);
-        public Task SetOAuth2Token(Garmin.Connect.Auth.OAuth2Token value,
+        public Task<global::Garmin.Connect.Auth.OAuth2Token?> GetOAuth2Token(
+            CancellationToken ct) => Task.FromResult<global::Garmin.Connect.Auth.OAuth2Token?>(token);
+        public Task SetOAuth2Token(global::Garmin.Connect.Auth.OAuth2Token value,
             CancellationToken ct) => Task.CompletedTask;
-        public Task<Garmin.Connect.Auth.OAuth1Token?> GetOAuth1Token(
-            CancellationToken ct) => Task.FromResult<Garmin.Connect.Auth.OAuth1Token?>(null);
-        public Task SetOAuth1Token(Garmin.Connect.Auth.OAuth1Token value,
+        public Task<global::Garmin.Connect.Auth.OAuth1Token?> GetOAuth1Token(
+            CancellationToken ct) => Task.FromResult<global::Garmin.Connect.Auth.OAuth1Token?>(null);
+        public Task SetOAuth1Token(global::Garmin.Connect.Auth.OAuth1Token value,
             CancellationToken ct) => Task.CompletedTask;
     }
 
