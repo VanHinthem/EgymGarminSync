@@ -263,18 +263,19 @@ internal static class GarminUncertainIsolationTest
                         var outcome=await GarminTransactionDryRun.ExecuteAsync(
                             reopened,trialActivityId,trialJournal.Id,
                             _=>Task.FromResult(new GarminTransactionDryRun.Observation(trialActivity,observed)),
-                            (_,_)=>{
-                                calls++;
-                                var tracked=reopened.WriteJournal.AsNoTracking()
-                                    .Single(x=>x.Id==trialJournal.Id);
-                                if(tracked.Status!="WriteStarted")
-                                    throw new InvalidOperationException("WriteStarted not durable before synthetic write.");
-                                if(scenario=="Timeout") throw new TimeoutException("synthetic timeout");
-                                observed=scenario=="Success" ? trialCandidate
-                                    : GarminSetFieldDraft.Apply(trialSets,
-                                        new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
-                                return Task.CompletedTask;
-                            });
+                            (_,outgoing)=>GarminWriteTransportAdapter.SendAsync(
+                                trialActivityId,outgoing,(id,fullPayload)=>{
+                                    calls++;
+                                    var tracked=reopened.WriteJournal.AsNoTracking()
+                                        .Single(x=>x.Id==trialJournal.Id);
+                                    if(tracked.Status!="WriteStarted" || id!=trialActivityId)
+                                        throw new InvalidOperationException("WriteStarted not durable before mock transport.");
+                                    if(scenario=="Timeout") throw new TimeoutException("synthetic timeout");
+                                    observed=scenario=="Success" ? trialCandidate
+                                        : GarminSetFieldDraft.Apply(trialSets,
+                                            new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
+                                    return Task.CompletedTask;
+                                }));
                         var expectedStatus=scenario=="Success" ? "SimulatedVerified" : "Uncertain";
                         var persisted=await reopened.WriteJournal.AsNoTracking()
                             .SingleAsync(x=>x.Id==trialJournal.Id);
@@ -440,6 +441,16 @@ internal static class GarminUncertainIsolationTest
                 reopened.ChangeTracker.Clear();
                 await GarminProcessRaceTest.RunParentAsync(path,processId,
                     processEntries[0].Id,processEntries[1].Id);
+                if(GarminWriteTransportAdapter.LiveWriteEnabled)
+                    throw new InvalidOperationException("Live PUT must remain disabled.");
+                var liveAdapterBlocked=false;
+                try {
+                    await GarminWriteTransportAdapter.SendAsync(crashId,crashOutgoing);
+                }
+                catch(InvalidOperationException) { liveAdapterBlocked=true; }
+                if(!liveAdapterBlocked)
+                    throw new InvalidOperationException("Adapter could issue live PUT.");
+                Console.WriteLine("PASS: guarded Garmin transport refuses live PUT without mock.");
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
