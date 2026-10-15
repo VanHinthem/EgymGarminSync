@@ -728,6 +728,14 @@ internal static class GarminUncertainIsolationTest
                         throw new InvalidOperationException("Unified payload persistence failed.");
                     await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
                         new(id,journal.Id,"Begin"),reopened),"Unified Begin");
+                    if(await GarminWriteApproval.ApproveAsync(reopened,
+                        new(id,journal.Id,Hash(candidate),Hash(outgoing),"INVALID")))
+                        throw new InvalidOperationException("Invalid authorization accepted.");
+                    if(!await GarminWriteApproval.ApproveAsync(reopened,
+                        new(id,journal.Id,Hash(candidate),Hash(outgoing),
+                            $"APPROVE GARMIN {id} {journal.Id}")))
+                        throw new InvalidOperationException("Explicit authorization denied.");
+                    reopened.ChangeTracker.Clear();
                     var observedSets=originalSets;
                     var physicalPuts=0;
                     var reads=0;
@@ -789,6 +797,7 @@ internal static class GarminUncertainIsolationTest
                     Console.WriteLine("PASS: unified guarded SDK "+scenario+
                         " -> "+expectedStatus+"; journal/cache consistent; no replay.");
                 }
+                Console.WriteLine("PASS: exact journal/payload approval enforced; invalid confirmation rejected.");
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
