@@ -580,6 +580,62 @@ internal static class GarminUncertainIsolationTest
                     Console.WriteLine("PASS: GarminConnectContext "+scenario+
                         " -> one physical PUT, no external HTTP.");
                 }
+                // SDK 401 -> successful mocked OAuth1/OAuth2 exchange -> SDK retries PUT.
+                // The physical write guard must intercept the retried request.
+                {
+                    var physicalPuts=0;
+                    var refreshPosts=0;
+                    using var guardedSdk=new GarminSinglePutGuard(
+                        new FakeGarminTransport((request,ct)=>{
+                            if(request.Method==HttpMethod.Put &&
+                                request.RequestUri?.AbsolutePath.EndsWith("/exerciseSets")==true)
+                            {
+                                physicalPuts++;
+                                return Task.FromResult(new HttpResponseMessage(
+                                    System.Net.HttpStatusCode.Unauthorized));
+                            }
+                            if(request.Method==HttpMethod.Post &&
+                                request.RequestUri?.AbsolutePath==
+                                    "/oauth-service/oauth/exchange/user/2.0")
+                            {
+                                refreshPosts++;
+                                return Task.FromResult(new HttpResponseMessage(
+                                    System.Net.HttpStatusCode.OK) {
+                                    Content=new StringContent(
+                                        "{\\"access_token\\":\\"synthetic-refreshed\\",\\"token_type\\":\\"Bearer\\",\\"expires_in\\":3600}")
+                                });
+                            }
+                            throw new InvalidOperationException("Unexpected outbound request.");
+                        }));
+                    using var sdkHttp=new HttpClient(guardedSdk);
+                    var oauthCache=new FakeGarminTokenCache(
+                        new global::Garmin.Connect.Auth.OAuth2Token {
+                            AccessToken="synthetic-old",TokenType="Bearer",ExpiresIn=3600
+                        },new global::Garmin.Connect.Auth.OAuth1Token {
+                            Token="synthetic-oauth1",TokenSecret="synthetic-secret"
+                        });
+                    var sdk=new global::Garmin.Connect.GarminConnectContext(
+                        sdkHttp,new global::Garmin.Connect.Auth.BasicAuthParameters(
+                            "synthetic@example.invalid","synthetic-password"),
+                        new global::Garmin.Connect.Auth.NotImplementedMfaCode(),oauthCache);
+                    var guardRejected=false;
+                    try
+                    {
+                        using var body=JsonDocument.Parse("{}");
+                        await sdk.MakeHttpPut(
+                            "/activity-service/activity/123/exerciseSets",body.RootElement);
+                    }
+                    catch(InvalidOperationException ex) when(
+                        ex.Message.Contains("Blocked repeated Garmin exerciseSets PUT."))
+                    {
+                        guardRejected=true;
+                    }
+                    if(!guardRejected || physicalPuts!=1 || refreshPosts!=1 ||
+                        guardedSdk.PutAttempts!=2 || oauthCache.RefreshCount!=1)
+                        throw new InvalidOperationException(
+                            "OAuth refresh retry was not intercepted by the guarded SDK.");
+                    Console.WriteLine("PASS: SDK 401 -> successful OAuth refresh -> second PUT blocked; one physical PUT.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
@@ -598,15 +654,17 @@ internal static class GarminUncertainIsolationTest
         }
     }
 
-    private sealed class FakeGarminTokenCache(global::Garmin.Connect.Auth.OAuth2Token token)
+    private sealed class FakeGarminTokenCache(global::Garmin.Connect.Auth.OAuth2Token token,
+        global::Garmin.Connect.Auth.OAuth1Token? oauth1 = null)
         : global::Garmin.Connect.Auth.ITokenCache
     {
+        public int RefreshCount { get; private set; }
         public Task<global::Garmin.Connect.Auth.OAuth2Token?> GetOAuth2Token(
             CancellationToken ct) => Task.FromResult<global::Garmin.Connect.Auth.OAuth2Token?>(token);
         public Task SetOAuth2Token(global::Garmin.Connect.Auth.OAuth2Token value,
-            CancellationToken ct) => Task.CompletedTask;
+            CancellationToken ct) { RefreshCount++; return Task.CompletedTask; }
         public Task<global::Garmin.Connect.Auth.OAuth1Token?> GetOAuth1Token(
-            CancellationToken ct) => Task.FromResult<global::Garmin.Connect.Auth.OAuth1Token?>(null);
+            CancellationToken ct) => Task.FromResult(oauth1);
         public Task SetOAuth1Token(global::Garmin.Connect.Auth.OAuth1Token value,
             CancellationToken ct) => Task.CompletedTask;
     }
