@@ -28,7 +28,7 @@ internal static class GarminSetsImport
     {
         if (skip < 0 || take is < 1 or > 10)
             return Results.BadRequest(new { error = "Use non-negative skip and take 1..10." });
-        if (!OperatingSystem.IsWindows())
+        if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Windows DPAPI is required.", statusCode: 501);
         var email = Environment.GetEnvironmentVariable("GARMIN_EMAIL");
         var password = Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
@@ -36,7 +36,7 @@ internal static class GarminSetsImport
             return Results.Problem("Garmin credentials unavailable.", statusCode: 503);
         try
         {
-            var cache = new WindowsGarminTokenCache(email);
+            var cache = new GarminTokenCacheProvider(email);
             if (cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown active.", statusCode: 429);
             using var http = new HttpClient(GarminIpv4Transport.Create());
