@@ -225,6 +225,74 @@ internal static class GarminUncertainIsolationTest
                 Console.WriteLine("PASS: Uncertain persisted after reopened SQLite connection.");
                 Console.WriteLine("PASS: Second journal blocked and remained DryRunVerified.");
                 Console.WriteLine("PASS: Uncertain journal cannot be restarted.");
+                foreach(var scenario in new[] {"Success","Timeout","Mismatch"})
+                {
+                    var trialActivityId=activityId+scenario.Length+scenario[0];
+                    var trialActivity=JsonSerializer.Serialize(new {activityId=trialActivityId});
+                    var trialSets=BuildSyntheticSets(trialActivityId);
+                    var trialCandidate=GarminSetFieldDraft.Apply(trialSets,
+                        new[] {new SetFieldEdit(2,"repetitionCount",15,14)});
+                    var trialOutgoing=GarminTrialPayloadNormalizer.Normalize(trialCandidate,trialActivityId);
+                    var snapshot=new GarminSnapshot {
+                        GarminActivityId=trialActivityId,Kind="WritePreparation",
+                        ActivityJson=trialActivity,ActivitySha256=Hash(trialActivity),
+                        ExerciseSetsJson=trialSets,SetsSha256=Hash(trialSets),
+                        CapturedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.GarminSnapshots.Add(snapshot);
+                    await reopened.SaveChangesAsync();
+                    var trialJournal=new GarminWriteJournal {
+                        GarminActivityId=trialActivityId,ApprovedSnapshotId=snapshot.Id,
+                        FreshSnapshotId=snapshot.Id,Status="DryRunVerified",
+                        OriginalSha256=Hash(trialSets),CandidateSha256=Hash(trialCandidate),
+                        ProposedPayloadSha256=Hash(trialOutgoing),
+                        RecoveryPayloadSha256=Hash(trialSets),
+                        CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.WriteJournal.Add(trialJournal);
+                    await reopened.SaveChangesAsync();
+                    await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                        new(trialActivityId,trialJournal.Id,"Begin"),reopened),"Dry run Begin");
+                    GarminTransactionDryRun.SyntheticPayloads.Set(trialJournal.Id,trialCandidate,trialOutgoing);
+                    var observed=trialSets;
+                    var calls=0;
+                    try
+                    {
+                        var outcome=await GarminTransactionDryRun.ExecuteAsync(
+                            reopened,trialActivityId,trialJournal.Id,
+                            _=>Task.FromResult(new GarminTransactionDryRun.Observation(trialActivity,observed)),
+                            (_,_)=>{
+                                calls++;
+                                var tracked=reopened.WriteJournal.AsNoTracking()
+                                    .Single(x=>x.Id==trialJournal.Id);
+                                if(tracked.Status!="WriteStarted")
+                                    throw new InvalidOperationException("WriteStarted not durable before synthetic write.");
+                                if(scenario=="Timeout") throw new TimeoutException("synthetic timeout");
+                                observed=scenario=="Success" ? trialCandidate
+                                    : GarminSetFieldDraft.Apply(trialSets,
+                                        new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
+                                return Task.CompletedTask;
+                            });
+                        var expectedStatus=scenario=="Success" ? "SimulatedVerified" : "Uncertain";
+                        var persisted=await reopened.WriteJournal.AsNoTracking()
+                            .SingleAsync(x=>x.Id==trialJournal.Id);
+                        if(outcome!=expectedStatus || persisted.Status!=expectedStatus || calls!=1)
+                            throw new InvalidOperationException("Dry run "+scenario+" status or count incorrect.");
+                        var duplicate=await GarminTransactionDryRun.ExecuteAsync(
+                            reopened,trialActivityId,trialJournal.Id,
+                            _=>Task.FromResult(new GarminTransactionDryRun.Observation(trialActivity,observed)),
+                            (_,_)=>throw new InvalidOperationException("Duplicate writer invoked"));
+                        if(duplicate!="Blocked" || calls!=1)
+                            throw new InvalidOperationException("Duplicate dry run was accepted.");
+                        if(await reopened.GarminSets.AnyAsync(x=>x.GarminActivityId==trialActivityId))
+                            throw new InvalidOperationException("Simulation modified cache.");
+                        Console.WriteLine("PASS: simulated transaction "+scenario+
+                            " -> "+expectedStatus+"; one synthetic write, duplicates refused.");
+                    }
+                    finally {
+                        GarminTransactionDryRun.SyntheticPayloads.Remove(trialJournal.Id);
+                    }
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
