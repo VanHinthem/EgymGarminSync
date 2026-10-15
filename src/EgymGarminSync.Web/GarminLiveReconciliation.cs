@@ -17,9 +17,14 @@ internal static class GarminLiveReconciliation
     private static string Hash(string s) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
-    public static async Task<IResult> ReadAsync(Request request, SyncDbContext db)
+    internal sealed record Observation(string ActivityJson, string ExerciseSetsJson);
+    internal delegate Task<Observation> ReadOnlyReader(long activityId);
+
+    public static Task<IResult> ReadAsync(Request request, SyncDbContext db) =>
+        EvaluateAsync(request, db, ReadFromGarminAsync);
+
+    internal static async Task<IResult> EvaluateAsync(Request request, SyncDbContext db, ReadOnlyReader reader)
     {
-        if (!OperatingSystem.IsWindows()) return Results.Problem("Windows DPAPI required.",statusCode:501);
         if (request.GarminId<=0 || request.JournalId<=0 || request.Edits is not {Length:>0 and <=72})
             return Results.BadRequest(new { error="GarminId, Uncertain journal ID and edits required." });
         var journal=await db.WriteJournal.AsNoTracking().SingleOrDefaultAsync(x=>
@@ -52,28 +57,11 @@ internal static class GarminLiveReconciliation
         {
             return Results.Conflict(new { error="Recovery candidate validation failed." });
         }
-        var email=Environment.GetEnvironmentVariable("GARMIN_EMAIL");
-        var password=Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
-        if(string.IsNullOrWhiteSpace(email)||string.IsNullOrWhiteSpace(password))
-            return Results.Problem("Garmin credentials unavailable.",statusCode:503);
         try
         {
-            var tokenCache=new WindowsGarminTokenCache(email);
-            if(tokenCache.IsInLoginCooldown(out _))
-                return Results.Problem("Garmin login cooldown.",statusCode:429);
-            using var http=new HttpClient(GarminIpv4Transport.Create());
-            var context=new GarminConnectContext(http,new BasicAuthParameters(email,password),
-                new NotImplementedMfaCode(),tokenCache);
-            var client=new GarminConnectClient(context);
-            var recent=await client.GetActivities(0,100);
-            if(!recent.Any(x=>x.ActivityId==request.GarminId &&
-                x.ActivityName is "EGYM Positief" or "EGYM Negatief"))
-                return Results.Conflict(new { error="Activity is not a recognized recent EGYM workout." });
-
-            var liveActivity=(await context.GetAndDeserialize<JsonElement>(
-                $"/activity-service/activity/{request.GarminId}")).GetRawText();
-            var liveSets=(await context.GetAndDeserialize<JsonElement>(
-                $"/activity-service/activity/{request.GarminId}/exerciseSets")).GetRawText();
+            var observation=await reader(request.GarminId);
+            var liveActivity=observation.ActivityJson;
+            var liveSets=observation.ExerciseSetsJson;
             using var liveDoc=JsonDocument.Parse(liveActivity);
             var validIdentity=liveDoc.RootElement.TryGetProperty("activityId",out var liveId) &&
                 liveId.TryGetInt64(out var number) && number==request.GarminId;
@@ -86,7 +74,6 @@ internal static class GarminLiveReconciliation
                     : "Uncertain";
             }
             catch(JsonException) { decision="Uncertain"; }
-            tokenCache.ClearLoginCooldown();
             return Results.Ok(new {
                 readOnly=true, writeEnabled=false, garminReadOnly=true,
                 activityId=request.GarminId, journalId=journal.Id,
@@ -101,5 +88,30 @@ internal static class GarminLiveReconciliation
         {
             return Results.Problem("Live Garmin readback failed; journal remains Uncertain, no write attempted.",statusCode:502);
         }
+    }
+
+    private static async Task<Observation> ReadFromGarminAsync(long activityId)
+    {
+        if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Windows DPAPI required.");
+        var email=Environment.GetEnvironmentVariable("GARMIN_EMAIL");
+        var password=Environment.GetEnvironmentVariable("GARMIN_PASSWORD");
+        if(string.IsNullOrWhiteSpace(email)||string.IsNullOrWhiteSpace(password))
+            throw new InvalidOperationException("Garmin credentials unavailable.");
+        var tokenCache=new WindowsGarminTokenCache(email);
+        if(tokenCache.IsInLoginCooldown(out _)) throw new InvalidOperationException("Garmin login cooldown.");
+        using var http=new HttpClient(GarminIpv4Transport.Create());
+        var context=new GarminConnectContext(http,new BasicAuthParameters(email,password),
+            new NotImplementedMfaCode(),tokenCache);
+        var client=new GarminConnectClient(context);
+        var recent=await client.GetActivities(0,100);
+        if(!recent.Any(x=>x.ActivityId==activityId &&
+            x.ActivityName is "EGYM Positief" or "EGYM Negatief"))
+            throw new InvalidOperationException("Target not a recent EGYM activity.");
+        var activity=(await context.GetAndDeserialize<JsonElement>(
+            $"/activity-service/activity/{activityId}")).GetRawText();
+        var sets=(await context.GetAndDeserialize<JsonElement>(
+            $"/activity-service/activity/{activityId}/exerciseSets")).GetRawText();
+        tokenCache.ClearLoginCooldown();
+        return new Observation(activity,sets);
     }
 }
