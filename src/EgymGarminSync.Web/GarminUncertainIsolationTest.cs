@@ -495,15 +495,15 @@ internal static class GarminUncertainIsolationTest
                                     new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
                             return Task.CompletedTask;
                         }));
-                    var expected=mode=="Verified" ? "Verified" : "Uncertain";
-                    if(result!=expected || writes!=1)
+                    var expectedIntegrationStatus=mode=="Verified" ? "Verified" : "Uncertain";
+                    if(result!=expectedIntegrationStatus || writes!=1)
                         throw new InvalidOperationException("Integrated "+mode+" outcome incorrect.");
                     reopened.ChangeTracker.Clear();
                     var persisted=await reopened.WriteJournal.AsNoTracking()
                         .SingleAsync(x=>x.Id==journal.Id);
                     var cache=await reopened.GarminSets.AsNoTracking()
                         .SingleOrDefaultAsync(x=>x.GarminActivityId==id);
-                    if(persisted.Status!=expected ||
+                    if(persisted.Status!=expectedIntegrationStatus ||
                         (mode=="Verified" ? cache is null || cache.Sha256!=Hash(candidate)
                             : cache is not null))
                         throw new InvalidOperationException("Integrated "+mode+" cache/journal inconsistent.");
@@ -514,7 +514,7 @@ internal static class GarminUncertainIsolationTest
                     if(duplicate!="Blocked")
                         throw new InvalidOperationException("Integrated "+mode+" replay allowed.");
                     Console.WriteLine("PASS: integrated mocked PUT "+mode+
-                        " -> "+expected+"; journal/cache atomic and duplicate blocked.");
+                        " -> "+expectedIntegrationStatus+"; journal/cache atomic and duplicate blocked.");
                 }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
