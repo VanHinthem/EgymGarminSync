@@ -55,7 +55,8 @@ using (var scope = app.Services.CreateScope())
             "RecoveryPayloadSha256" TEXT NOT NULL,
             "CreatedUtc" TEXT NOT NULL,
             "UpdatedUtc" TEXT NOT NULL,
-            "ErrorCode" TEXT NULL
+            "ErrorCode" TEXT NULL,
+            "OperationId" TEXT NULL
         )
         """);
     await database.Database.ExecuteSqlRawAsync("""
@@ -73,6 +74,12 @@ using (var scope = app.Services.CreateScope())
         ON "WriteJournal" ("GarminActivityId")
         WHERE "Status" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')
         """);
+    // Non-destructive schema evolution for existing local sync.db files.
+    var writeJournalColumns=await database.Database.SqlQueryRaw<string>(
+        "SELECT name AS Value FROM pragma_table_info('WriteJournal')").ToListAsync();
+    if(!writeJournalColumns.Contains("OperationId",StringComparer.OrdinalIgnoreCase))
+        await database.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"WriteJournal\" ADD COLUMN \"OperationId\" TEXT NULL");
     await GarminCrashRecovery.RecoverAsync(database);
 }
 app.UseCors("LocalUi");
