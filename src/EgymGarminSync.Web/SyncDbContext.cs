@@ -9,6 +9,7 @@ internal sealed class SyncDbContext(DbContextOptions<SyncDbContext> options) : D
     public DbSet<GarminSnapshot> GarminSnapshots => Set<GarminSnapshot>();
     public DbSet<GarminSetsCache> GarminSets => Set<GarminSetsCache>();
     public DbSet<GarminWriteJournal> WriteJournal => Set<GarminWriteJournal>();
+    public DbSet<GarminWritePayload> WritePayloads => Set<GarminWritePayload>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -17,6 +18,7 @@ internal sealed class SyncDbContext(DbContextOptions<SyncDbContext> options) : D
         builder.Entity<SyncCheckpoint>().HasKey(x => x.Source);
         builder.Entity<GarminSetsCache>().HasKey(x => x.GarminActivityId);
         builder.Entity<GarminWriteJournal>().HasKey(x => x.Id);
+        builder.Entity<GarminWritePayload>().HasKey(x => x.JournalId);
         builder.Entity<GarminWriteJournal>().HasIndex(x => x.GarminActivityId)
             .IsUnique().HasFilter("\"Status\" IN ('Preparing', 'Ready', 'WriteStarted', 'Uncertain')");
         builder.Entity<GarminSnapshot>().HasKey(x => x.Id);
@@ -80,4 +82,14 @@ internal sealed class GarminWriteJournal
     public DateTimeOffset CreatedUtc { get; set; }
     public DateTimeOffset UpdatedUtc { get; set; }
     public string? ErrorCode { get; set; }
+}
+
+internal sealed class GarminWritePayload
+{
+    public long JournalId { get; set; }
+    public long GarminActivityId { get; set; }
+    public string CandidateJson { get; set; } = "";
+    public string OutgoingJson { get; set; } = "";
+    public string CandidateSha256 { get; set; } = "";
+    public string OutgoingSha256 { get; set; } = "";
 }
