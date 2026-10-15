@@ -111,7 +111,8 @@ internal static class GarminUncertainIsolationTest
                         new(activityId,firstJournalId,
                             new[] { new GarminReconciliation.Edit(2,"repetitionCount",15,14) },
                             testCase.Key),reopened);
-                    if(response is not IValueHttpResult { StatusCode:200 } value)
+                    if(response is not IValueHttpResult value ||
+                       response is not IStatusCodeHttpResult { StatusCode:200 })
                         throw new InvalidOperationException("Reconciliation "+testCase.Key+" rejected.");
                     using var responseDoc=JsonDocument.Parse(JsonSerializer.Serialize(value.Value));
                     var root=responseDoc.RootElement;
