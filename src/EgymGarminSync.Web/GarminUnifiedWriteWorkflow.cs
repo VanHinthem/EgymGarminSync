@@ -18,7 +18,7 @@ internal static class GarminUnifiedWriteWorkflow
     {
         if(!GarminWriteTransportAdapter.LiveWriteEnabled)
             return "Disabled";
-        if(!OperatingSystem.IsWindows())
+        if(!GarminTokenCacheProvider.IsSupported)
             return "Blocked";
 
         var email=Environment.GetEnvironmentVariable("GARMIN_EMAIL");
@@ -26,7 +26,7 @@ internal static class GarminUnifiedWriteWorkflow
         if(string.IsNullOrWhiteSpace(email)||string.IsNullOrWhiteSpace(password))
             return "Blocked";
 
-        var tokenCache=new WindowsGarminTokenCache(email);
+        var tokenCache=new GarminTokenCacheProvider(email);
         if(tokenCache.IsInLoginCooldown(out _))
             return "Blocked";
 
