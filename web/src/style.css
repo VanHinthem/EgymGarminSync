@@ -61,3 +61,10 @@
 .saveConfirm p{margin:0 0 12px}
 .saveConfirm .buttons{display:flex;gap:10px;flex-wrap:wrap}
 .saveConfirm button{margin-top:0}
+
+.syncOverview{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px;margin-bottom:14px;border:1px solid #d9e6e8;background:#f1f7f8;border-radius:11px}
+.syncOverview>div{display:flex;flex-direction:column;gap:4px}
+.syncOverview strong{font-size:13px;color:#245e68}
+.syncOverview span{font-size:11px;color:#607784}
+.syncOverview button{white-space:nowrap}
+@media(max-width:760px){.syncOverview{align-items:stretch;flex-direction:column}.syncOverview button{align-self:flex-start}}
