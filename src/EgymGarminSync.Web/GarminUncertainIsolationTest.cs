@@ -451,6 +451,71 @@ internal static class GarminUncertainIsolationTest
                 if(!liveAdapterBlocked)
                     throw new InvalidOperationException("Adapter could issue live PUT.");
                 Console.WriteLine("PASS: guarded Garmin transport refuses live PUT without mock.");
+                foreach(var mode in new[] {"Verified","Mismatch","Timeout"})
+                {
+                    var id=activityId+20000+mode.Length;
+                    var activityJson=JsonSerializer.Serialize(new {activityId=id});
+                    var baseline=BuildSyntheticSets(id);
+                    var candidate=GarminSetFieldDraft.Apply(baseline,
+                        new[] {new SetFieldEdit(2,"repetitionCount",15,14)});
+                    var outgoing=GarminTrialPayloadNormalizer.Normalize(candidate,id);
+                    var backup=new GarminSnapshot {
+                        GarminActivityId=id,Kind="WritePreparation",
+                        ActivityJson=activityJson,ActivitySha256=Hash(activityJson),
+                        ExerciseSetsJson=baseline,SetsSha256=Hash(baseline),
+                        CapturedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.GarminSnapshots.Add(backup);
+                    await reopened.SaveChangesAsync();
+                    var journal=new GarminWriteJournal {
+                        GarminActivityId=id,ApprovedSnapshotId=backup.Id,
+                        FreshSnapshotId=backup.Id,Status="DryRunVerified",
+                        OriginalSha256=Hash(baseline),CandidateSha256=Hash(candidate),
+                        ProposedPayloadSha256=Hash(outgoing),RecoveryPayloadSha256=Hash(baseline),
+                        CreatedUtc=DateTimeOffset.UtcNow,UpdatedUtc=DateTimeOffset.UtcNow
+                    };
+                    reopened.WriteJournal.Add(journal);
+                    await reopened.SaveChangesAsync();
+                    if(!await GarminTransactionDryRun.PersistSyntheticPayloadAsync(
+                        reopened,id,journal.Id,candidate,outgoing))
+                        throw new InvalidOperationException("Integration payload save failed.");
+                    await RequireSuccess(GarminJournalLifecycle.TransitionAsync(
+                        new(id,journal.Id,"Begin"),reopened),"Integrated Begin");
+                    var observed=baseline;
+                    var writes=0;
+                    var result=await GarminTransactionDryRun.ExecuteVerifiedIsolationAsync(
+                        reopened,id,journal.Id,
+                        _=>Task.FromResult(new GarminTransactionDryRun.Observation(activityJson,observed)),
+                        (_,payload)=>GarminWriteTransportAdapter.SendAsync(id,payload,(target,_)=>{
+                            if(target!=id) throw new InvalidOperationException("Activity mismatch.");
+                            writes++;
+                            if(mode=="Timeout") throw new TimeoutException("Mock PUT timeout.");
+                            observed=mode=="Verified" ? candidate :
+                                GarminSetFieldDraft.Apply(baseline,
+                                    new[] {new SetFieldEdit(2,"repetitionCount",15,13)});
+                            return Task.CompletedTask;
+                        }));
+                    var expected=mode=="Verified" ? "Verified" : "Uncertain";
+                    if(result!=expected || writes!=1)
+                        throw new InvalidOperationException("Integrated "+mode+" outcome incorrect.");
+                    reopened.ChangeTracker.Clear();
+                    var persisted=await reopened.WriteJournal.AsNoTracking()
+                        .SingleAsync(x=>x.Id==journal.Id);
+                    var cache=await reopened.GarminSets.AsNoTracking()
+                        .SingleOrDefaultAsync(x=>x.GarminActivityId==id);
+                    if(persisted.Status!=expected ||
+                        (mode=="Verified" ? cache is null || cache.Sha256!=Hash(candidate)
+                            : cache is not null))
+                        throw new InvalidOperationException("Integrated "+mode+" cache/journal inconsistent.");
+                    var duplicate=await GarminTransactionDryRun.ExecuteVerifiedIsolationAsync(
+                        reopened,id,journal.Id,
+                        _=>throw new InvalidOperationException("Unexpected repeated GET"),
+                        (_,_)=>throw new InvalidOperationException("Unexpected repeated PUT"));
+                    if(duplicate!="Blocked")
+                        throw new InvalidOperationException("Integrated "+mode+" replay allowed.");
+                    Console.WriteLine("PASS: integrated mocked PUT "+mode+
+                        " -> "+expected+"; journal/cache atomic and duplicate blocked.");
+                }
                 Console.WriteLine("ISOLATED ONLY: no Garmin HTTP, no changes to sync.db, no PUT.");
             }
             return 0;
