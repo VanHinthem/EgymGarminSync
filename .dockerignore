@@ -12,3 +12,6 @@
 **/sync.db*
 **/*.dpapi
 **/*.cooldown
+
+**/*.aesgcm
+data/
