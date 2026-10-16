@@ -184,6 +184,7 @@ app.MapGet("/api/egym/sessions", async (int? days) =>
 });
 
 app.MapGet("/api/garmin/sessions", GarminReadOnlySessions.GetAsync);
+app.MapGet("/api/dev/garmin/strength-inspect/{activityId:long}", GarminGenericStrengthInspection.InspectAsync);
 app.MapPost("/api/cache/garmin-sets/import", GarminSetsImport.ImportAsync);
 app.MapGet("/api/cache/garmin-sets/{activityId:long}", GarminSetsImport.GetCachedAsync);
 app.MapGet("/api/compare", ReadOnlySetComparison.GetAsync);
