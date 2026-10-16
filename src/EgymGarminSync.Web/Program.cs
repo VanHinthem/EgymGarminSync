@@ -200,6 +200,7 @@ app.MapGet("/api/cache/compare", async (string egymId, long garminId, SyncDbCont
     using var target = JsonDocument.Parse(garmin.ExerciseSetsJson);
     return ReadOnlySetComparison.CompareCached(source.RootElement, target.RootElement);
 });
+app.MapGet("/api/dev/garmin/generic-preview", GenericStrengthSetPreview.GetAsync);
 app.MapPost("/api/sync/preview", GarminEditPreview.PreviewAsync);
 app.MapPost("/api/sync/prepare", GarminEditPreview.PrepareAsync);
 app.MapGet("/api/sync/restore-plan/{activityId:long}", GarminRestorePlan.GetAsync);
