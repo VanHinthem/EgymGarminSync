@@ -59,6 +59,10 @@ The example Compose file disables writes. On Linux, enabling them requires **bot
 
 Windows development uses the original per-user DPAPI Garmin token cache; Linux uses a separately keyed AES-256-GCM token cache. Windows token files cannot be copied into the Linux cache.
 
+## Publishing a release
+
+After the `main` CI and Docker build are green, open **Actions → Publish Docker image → Run workflow**, select `main` and enter `v1.0.0` (or a later `vX.Y.Z`) in **release_version**. The workflow publishes the versioned GHCR image and then creates the GitHub Release for that exact commit. Do not rerun an existing release version; bump the version for subsequent releases. Until that workflow has succeeded, `v1.0.0` is **not** an available image tag.
+
 ## Local development
 
 Install .NET SDK 10 and Node.js 22 or newer supported by the frontend. Configure `EGYM_EMAIL`, `EGYM_PASSWORD`, `GARMIN_EMAIL` and `GARMIN_PASSWORD` in the backend's *own environment* (do not commit them).
