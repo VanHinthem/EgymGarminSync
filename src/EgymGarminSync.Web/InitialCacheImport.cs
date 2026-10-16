@@ -13,7 +13,7 @@ namespace EgymGarminSync.Web;
 /// <summary>Initial server-side imports. Checkpoints mean completed imports, not API modification cursors.</summary>
 internal static class InitialCacheImport
 {
-    public static async Task<IResult> ImportAsync(SyncDbContext db, bool incremental = false)
+    public static async Task<IResult> ImportAsync(SyncDbContext db, ILogger<InitialCacheImport> logger, bool incremental = false)
     {
         if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Garmin import currently requires Windows DPAPI.", statusCode: 501);
@@ -34,14 +34,17 @@ internal static class InitialCacheImport
         List<JsonElement> egymWorkouts;
         (long Id,string Name,DateTime Utc)[] garminActivities;
         var refreshedSets = new List<(long Id, string Raw, string Hash)>();
+        var stage="EGYM fetch";
         try
         {
             using var egym=new EgymClient(Environment.GetEnvironmentVariable("EGYM_BASE_URL"),ee!,ep!);
             var today=DateOnly.FromDateTime(DateTime.Today);
             egymWorkouts=(await egym.GetWorkoutsAsync(since,today)).ToList();
+            stage="Garmin token cache initialization";
             var cache=new GarminTokenCacheProvider(ge!);
             if(cache.IsInLoginCooldown(out _))
                 return Results.Problem("Garmin login cooldown.",statusCode:429);
+            stage="Garmin activity discovery";
             using var http = new HttpClient(GarminIpv4Transport.Create());
             var context=new GarminConnectContext(http,
                 new BasicAuthParameters(ge!,gp!),new NotImplementedMfaCode(),cache);
@@ -58,6 +61,7 @@ internal static class InitialCacheImport
                 // rolling sync; existing cache and checkpoints remain untouched.
                 foreach (var activity in recent)
                 {
+                    stage="Garmin exercise sets fetch";
                     var response = await context.GetAndDeserialize<JsonElement>(
                         $"/activity-service/activity/{activity.Id}/exerciseSets");
                     if (!response.TryGetProperty("exerciseSets", out var sets) ||
@@ -69,9 +73,12 @@ internal static class InitialCacheImport
             }
             cache.ClearLoginCooldown();
         }
-        catch(Exception)
+        catch(Exception ex)
         {
-            return Results.Problem("Import failed to read EGYM or Garmin. Database not changed.",statusCode:502);
+            // Do not log exception messages or stack traces: unofficial authentication
+            // libraries may include sensitive request or token information.
+            logger.LogError("Import failed during {Stage}; exception type {ExceptionType}. Database unchanged.", stage, ex.GetType().FullName);
+            return Results.Problem($"Import failed during {stage}. Check container logs. Database not changed.",statusCode:502);
         }
 
         var now=DateTimeOffset.UtcNow;
