@@ -13,7 +13,7 @@ namespace EgymGarminSync.Web;
 /// <summary>Initial server-side imports. Checkpoints mean completed imports, not API modification cursors.</summary>
 internal static class InitialCacheImport
 {
-    public static async Task<IResult> ImportAsync(SyncDbContext db, ILogger<InitialCacheImport> logger, bool incremental = false)
+    public static async Task<IResult> ImportAsync(SyncDbContext db, ILogger<Program> logger, bool incremental = false)
     {
         if (!GarminTokenCacheProvider.IsSupported)
             return Results.Problem("Garmin import currently requires Windows DPAPI.", statusCode: 501);
