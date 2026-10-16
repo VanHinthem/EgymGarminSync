@@ -1,64 +1,104 @@
 # EGYM Garmin Sync
 
-Self-hosted web app to compare EGYM circuit sessions and Garmin strength-training records, review weight changes, and selectively synchronize them.
+Self-hosted application for comparing completed **EGYM strength-circuit training** with recorded **Garmin Connect strength activities**, and selectively correcting Garmin's **recorded exercise-set weights and repetitions**. Runs as a .NET 10 API and React/TypeScript UI in one Docker container, with SQLite for local history, snapshots and the write journal.
 
-## Scope
-- Read recent EGYM workouts and Garmin activities / exercise sets.
-- Match exercises by identity, never by order. EGYM circuit has two rounds; station order varies.
-- Support two user-created Garmin workout templates for different training methods.
-- Keep cycling warm-up / finishing cardio, repetitions, set counts and all other unrelated Garmin data unchanged.
-- Show differences, allow manual corrections and require explicit approval before any Garmin writes.
-- Optionally update a recorded activity, a workout template or both.
-- Back up original payloads before replace-all updates, audit writes, and verify server state.
-- Never commit credentials or authentication tokens.
+> **Personal-use software, not an official EGYM or Garmin product.** Both services use unofficial APIs; upstream changes may break synchronization. No automatic Garmin writes.
 
-## Proposed stack
-ASP.NET Core (.NET 10), React and TypeScript; later Docker deployment on a NAS. Python repositories are reference implementations only, **not runtime dependencies**.
+## What it does
 
-## Stages
-1. Read-only API exploration and real JSON payload inspection.
-2. Exercise identity mapping and training-method detection.
-3. Web comparison UI with dry-run previews.
-4. Approved, backed-up Garmin updates.
-5. Optional automatic polling; no unattended writes by default.
+1. **Synchronize** recent completed EGYM sessions and Garmin activities. The first synchronization initializes the database *and imports Garmin exercise sets*; later runs refresh recent activity data.
+2. **Match sessions** by training method (EGYM positive/negative versus the corresponding Garmin name) and completion time. A Garmin activity must be a unique match within the supported window; ambiguous sessions are not guessed.
+3. **Compare sets** by known exercise identity, not exercise order. The UI shows kg/repetition differences and lets you navigate workouts needing attention. The two circuit rounds are matched separately; cardio is not edited.
+4. **Review changes** to Garmin's *recorded activity*, select the fields to adopt from EGYM and confirm in the UI.
+5. **Safely write to Garmin** only after an explicit **Ja, opslaan** choice: create a backup/snapshot, verify live preconditions and whole-payload hashes, record a write journal, perform a guarded single PUT and read back the full remote activity. Successful verification refreshes the local comparison automatically. **Nee, annuleren** cancels a still-unused preparation.
 
-## References
-- [Unofficial EGYM API client](https://github.com/marcelpoelstra/python-egym)
-- [Unofficial Garmin Connect API client](https://github.com/cyberjunky/python-garminconnect)
+Unknown exercises, ambiguous mappings or an unexpected Garmin payload require manual attention. A network failure after a possible PUT is **Uncertain**, never silently retried: inspect and reconcile the journal before another write. Older Garmin activities can fall outside the latest-100 discovery window. The initial import normally looks back 180 days; incremental synchronization rechecks recent activity data.
 
-See [functional requirements](docs/requirements.md). Both APIs are unofficial and must be validated against real account data.
+**Not supported:** updating planned Garmin workout templates, automatically correcting workouts without confirmation, or treating exercise order as a reliable exercise ID.
 
-## Docker / GHCR (experimental Linux packaging)
+## Deploy with Docker (Linux NAS)
 
-Every push to `main` builds and publishes multi-architecture images to
-`ghcr.io/vanhinthem/egymgarminsync:latest` and `sha-<commit>` using
-[Publish Docker image](.github/workflows/docker.yml).
-
-Copy `docker-compose.example.yml` to `docker-compose.yml`, set
-`EGYM_EMAIL`, `EGYM_PASSWORD`, `GARMIN_EMAIL` and `GARMIN_PASSWORD`
-in the deployment environment, then run `docker compose up -d`.
-The example binds HTTP to host loopback `127.0.0.1:5187` for a local
-reverse proxy. Store persistent SQLite data in `./data`; never discard
-or overwrite that directory during upgrades.
-
-**Linux Garmin authentication:** the container uses an AES-256-GCM encrypted
-OAuth token cache in the persistent `./data/Garmin` directory. Generate a
-persistent 32-byte key (Base64) and supply it as `GARMIN_TOKEN_KEY`:
+Requirements: Docker Engine with Compose, outbound HTTPS for both APIs, a persistent volume and a Garmin account *without an unimplemented MFA challenge*. Images for `linux/amd64` and `linux/arm64` are published by GitHub Actions on pushes to `main`.
 
 ```sh
+cp docker-compose.example.yml docker-compose.yml
+cp .env.example .env
 openssl rand -base64 32
 ```
 
-Keep this key in a secrets manager or a protected local environment file,
-never in Git. Do not change it between deployments: an incorrect key refuses
-to load the token cache (no silent reset). Windows continues to use DPAPI.
+Set the four account variables in `.env` and place the generated **Base64** key in `GARMIN_TOKEN_KEY`. Keep this key unchanged across upgrades; losing it makes the encrypted Garmin token cache unreadable. Keep `.env` out of version control and limit access to it.
 
-Live Garmin writes remain disabled by default. Linux additionally requires
-both `GARMIN_WRITE_ENABLED=1` and `GARMIN_LINUX_WRITE_ENABLED=1`, along with
-the existing explicit per-write approval and full readback checks. **Do not
-enable live writes on NAS until a read-only login/import and isolated
-verification have passed on the NAS itself.** The Windows DPAPI token file
-cannot be migrated directly. Use a new login with your credentials instead.
+```sh
+docker compose pull
+docker compose up -d
+docker compose ps
+```
 
-The GitHub package may initially be private; configure NAS GHCR authentication
-if the registry denies an anonymous pull.
+Open the UI via the address/port you expose in Compose or through a trusted local reverse proxy. The example deliberately binds **127.0.0.1:5187** on the Docker host; from another machine this port is unavailable without changing the binding or using a proxy. For example, on a trusted LAN-only host, use `192.168.x.x:5187:5187` instead, substituting your host IP.
+
+**Security: the current API has no application-level authentication. Do not expose it directly on the public internet.** Serve only on a trusted local network, or enforce authentication and HTTPS at an upstream reverse proxy. Whoever can access the API may initiate synchronization and, if writing is enabled, interact with sensitive write endpoints. Protect the SQLite volume and all backups as private user data.
+
+Click **Synchroniseren**: a fresh database bootstraps itself; Garmin exercise sets are included. No manual import command is normally needed. Status and troubleshooting:
+
+```sh
+curl -fsS http://127.0.0.1:5187/api/health
+docker compose logs --tail=100 egym-garmin-sync
+```
+
+Use the address configured on your host if you changed the loopback binding. On failed upstream import the server reports the failing phase without logging credentials or token contents.
+
+### Persistence, upgrades and backups
+
+The `./data:/data` bind mount holds SQLite (`sync.db`), immutable Garmin snapshots, write journal and the encrypted Linux OAuth token cache (`data/Garmin`). Back up **the entire data directory and the separately stored encryption key**, preferably with the container stopped for a consistent SQLite backup. Do not delete the mount when redeploying.
+
+`ghcr.io/vanhinthem/egymgarminsync:latest` tracks `main`. For predictable upgrades, pin the image to a `vX.Y.Z` release tag where available. GHCR may require authentication when packages are private.
+
+### Enabling writes deliberately
+
+The example Compose file disables writes. On Linux, enabling them requires **both** `GARMIN_WRITE_ENABLED=1` and `GARMIN_LINUX_WRITE_ENABLED=1` in the container configuration, *after* you have checked that read-only synchronization and the guarded verification flow work. These switches are deployment controls, **not a substitute for endpoint authentication**. Every actual write still needs an explicit per-activity UI confirmation; never auto-retry an uncertain result.
+
+Windows development uses the original per-user DPAPI Garmin token cache; Linux uses a separately keyed AES-256-GCM token cache. Windows token files cannot be copied into the Linux cache.
+
+## Local development
+
+Install .NET SDK 10 and Node.js 22 or newer supported by the frontend. Configure `EGYM_EMAIL`, `EGYM_PASSWORD`, `GARMIN_EMAIL` and `GARMIN_PASSWORD` in the backend's *own environment* (do not commit them).
+
+```powershell
+dotnet run --project src/EgymGarminSync.Web
+```
+
+In a second terminal:
+
+```sh
+cd web
+npm install
+npm run dev
+```
+
+The Vite development UI is served at `http://127.0.0.1:5173` and proxies `/api` to the local .NET backend on port 5187. Writes default to disabled. For local Windows-only write testing, explicitly set `GARMIN_WRITE_ENABLED=1` **in the backend process** after verifying your intended changes.
+
+## Repository guide
+
+| Location | Responsibility |
+| --- | --- |
+| `src/EgymGarminSync.Web/` | ASP.NET Core API, import/cache, SQLite, guarded write workflow and recovery |
+| `src/EgymGarminSync.Egym/` | EGYM client |
+| `src/EgymGarminSync.Matching/` | Exercise/set matching, validation and preflight logic |
+| `src/EgymGarminSync.Garmin.Cli/` | Garmin transport, token caching and diagnostic CLI experiments |
+| `src/EgymGarminSync.Cli/` | Early EGYM exploration CLI |
+| `web/` | React/TypeScript review UI |
+| `tests/` | Matching and EGYM regression tests |
+| `.github/workflows/ci.yml` | .NET, UI and guarded-write tests |
+| `.github/workflows/docker.yml` | GHCR image publication |
+
+For implementation safety context, see [Garmin update contract](docs/garmin-exercise-set-update-contract.md) and [backup/recovery design](docs/garmin-backup-recovery-design.md). Historic experiments can be retrieved from Git history; they are not deployment instructions.
+
+## Key safeguards
+
+- Never commit passwords, token caches, personal workout exports, snapshots or `.env`.
+- No Garmin write without a fresh backup, explicit approval, single guarded PUT and verified readback.
+- An uncertain write is **not** a safe invitation to retry. Preserve journal and backups.
+- Do not manually modify SQLite write-journal states or overwrite the encrypted token cache.
+- Verify behavior in a non-production scenario before changing write logic.
+
+License: no separate license is presently declared; refer to repository ownership before redistributing.
