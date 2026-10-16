@@ -44,8 +44,6 @@ internal static class GarminGenericStrengthInspection
                 typeNode.ValueKind == JsonValueKind.Object &&
                 typeNode.TryGetProperty("typeKey", out var key) &&
                 key.ValueKind == JsonValueKind.String ? key.GetString() : null;
-            if (type != "strength_training")
-                return Results.BadRequest(new { error = "Activity is not a generic Garmin strength-training activity.", detectedType = type });
             if (!setsResponse.TryGetProperty("exerciseSets", out var sets) ||
                 sets.ValueKind != JsonValueKind.Array)
                 return Results.Problem("Garmin returned no exerciseSets array.", statusCode: 502);
@@ -53,6 +51,12 @@ internal static class GarminGenericStrengthInspection
             return Results.Ok(new {
                 activityId,
                 activityType = type,
+                activityTypeValueKind = activity.TryGetProperty("activityType", out var activityTypeNode)
+                    ? activityTypeNode.ValueKind.ToString() : "Missing",
+                activityTypeFieldNames = activity.TryGetProperty("activityType", out var activityTypeFields) &&
+                    activityTypeFields.ValueKind == JsonValueKind.Object
+                    ? activityTypeFields.EnumerateObject().Select(p => p.Name).Order().ToArray()
+                    : Array.Empty<string>(),
                 activityRootKeys = activity.EnumerateObject().Select(p => p.Name).Order().ToArray(),
                 setsRootKeys = setsResponse.EnumerateObject().Select(p => p.Name).Order().ToArray(),
                 setCount = entries.Length,
