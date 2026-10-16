@@ -101,8 +101,8 @@ app.MapGet("/api/health", () => Results.Ok(new {
     writeEnabled = GarminWriteTransportAdapter.LiveWriteEnabled,
     database = "SQLite"
 }));
-app.MapPost("/api/cache/import-initial", (SyncDbContext db, ILogger<InitialCacheImport> logger) => InitialCacheImport.ImportAsync(db, logger));
-app.MapPost("/api/cache/sync", (SyncDbContext db, ILogger<InitialCacheImport> logger) => InitialCacheImport.ImportAsync(db, logger, incremental: true));
+app.MapPost("/api/cache/import-initial", (SyncDbContext db, ILogger<Program> logger) => InitialCacheImport.ImportAsync(db, logger));
+app.MapPost("/api/cache/sync", (SyncDbContext db, ILogger<Program> logger) => InitialCacheImport.ImportAsync(db, logger, incremental: true));
 app.MapGet("/api/cache/sessions", async (string? source, SyncDbContext db) =>
 {
     if (source is not ("EGYM" or "Garmin"))
