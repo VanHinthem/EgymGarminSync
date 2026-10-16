@@ -51,6 +51,26 @@ internal static class GarminGenericStrengthInspection
             return Results.Ok(new {
                 activityId,
                 activityType = type,
+                activityTypeDtoFields = activity.TryGetProperty("activityTypeDTO", out var dto) &&
+                    dto.ValueKind == JsonValueKind.Object
+                    ? dto.EnumerateObject().Select(p => p.Name).Order().ToArray()
+                    : Array.Empty<string>(),
+                activityTypeDtoTypeKey = activity.TryGetProperty("activityTypeDTO", out var dtoType) &&
+                    dtoType.ValueKind == JsonValueKind.Object &&
+                    dtoType.TryGetProperty("typeKey", out var dtoKey) &&
+                    dtoKey.ValueKind == JsonValueKind.String ? dtoKey.GetString() : null,
+                setStructure = entries.Select((s, index) => new {
+                    index,
+                    setType = s.TryGetProperty("setType", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() : null,
+                    exerciseCount = s.TryGetProperty("exercises", out var es) && es.ValueKind == JsonValueKind.Array ? es.GetArrayLength() : 0,
+                    exercises = s.TryGetProperty("exercises", out var e) && e.ValueKind == JsonValueKind.Array
+                        ? e.EnumerateArray().Select(v => new {
+                            fieldNames = v.ValueKind == JsonValueKind.Object ? v.EnumerateObject().Select(p => p.Name).Order().ToArray() : Array.Empty<string>(),
+                            category = v.ValueKind == JsonValueKind.Object && v.TryGetProperty("category", out var category) && category.ValueKind == JsonValueKind.String ? category.GetString() : null,
+                            name = v.ValueKind == JsonValueKind.Object && v.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String ? name.GetString() : null
+                        }).ToArray()
+                        : Array.Empty<object>()
+                }).ToArray(),
                 activityTypeValueKind = activity.TryGetProperty("activityType", out var activityTypeNode)
                     ? activityTypeNode.ValueKind.ToString() : "Missing",
                 activityTypeFieldNames = activity.TryGetProperty("activityType", out var activityTypeFields) &&
