@@ -25,8 +25,9 @@ internal static class InitialCacheImport
             return Results.Problem("Configure both API accounts in the server process.",statusCode:503);
 
         var previous = await db.Checkpoints.AsNoTracking().SingleOrDefaultAsync(x => x.Source == "EGYM");
+        // First synchronization automatically performs a full initial import.
         if (incremental && previous is null)
-            return Results.Conflict(new { error = "Initial import required before rolling sync." });
+            incremental = false;
         var since = incremental
             ? DateOnly.FromDateTime(previous!.LastSuccessfulUtc.UtcDateTime.AddDays(-7))
             : DateOnly.FromDateTime(DateTime.Today.AddDays(-180));
@@ -53,13 +54,14 @@ internal static class InitialCacheImport
                 .Where(a=>a.ActivityName is "EGYM Positief" or "EGYM Negatief")
                 .Select(a=>(a.ActivityId,a.ActivityName,DateTime.SpecifyKind(a.StartTimeGmt,DateTimeKind.Utc)))
                 .ToArray();
-            if (incremental)
             {
                 var cutoff = since.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-                var recent = garminActivities.Where(a => a.Utc >= cutoff).ToArray();
-                // Fetch before opening the transaction. Any failure aborts the entire
-                // rolling sync; existing cache and checkpoints remain untouched.
-                foreach (var activity in recent)
+                var selected = incremental
+                    ? garminActivities.Where(a => a.Utc >= cutoff).ToArray()
+                    : garminActivities;
+                // Fetch all exercise sets during initial import and recent sets during
+                // rolling sync. A fetch failure must leave checkpoints and cache unchanged.
+                foreach (var activity in selected)
                 {
                     stage="Garmin exercise sets fetch";
                     var response = await context.GetAndDeserialize<JsonElement>(
